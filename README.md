@@ -1,17 +1,6 @@
 # CodeArch: Code Archaeology Assistant
 
-## How It Works
-
-### Code Archaeology Workflow
-
-1. **Select Code**: Highlight any block of code in a Git repository
-2. **Right-Click**: Choose "CodeArch: Analyze Selection" from the context menu
-3. **Evolution Tracking**: CodeArch uses `git blame` to identify which commits modified those exact lines
-4. **Smart Diff Extraction**: For each commit, extracts only the diff hunks that intersected with your selection
-5. **AI Analysis**: Feeds commit messages, surrounding code context, and PR information to your chosen AI provider
-6. **Confident Results**: Get definitive explanations of why the code exists and how it evolved
-
-**CodeArch** is a VS Code extension that transforms code investigation from a time-consuming manual process into a single, seamless action. By highlighting any block of code, developers can instantly receive a rich, AI-powered narrative history that explains the "why" behind the code using advanced evolution-based git analysis with support for multiple AI providers including Gemini, OpenAI, Claude, and Hugging Face.
+**CodeArch** is a VS Code extension that transforms code investigation from a time-consuming manual process into a single, seamless action. By highlighting any block of code, developers can instantly receive a rich, AI-powered narrative history that explains the "why" behind the code using advanced evolution-based git analysis.
 
 ## Key Features
 
@@ -24,7 +13,6 @@
 ### **Multi-Provider AI Assistant**
 
 - **Multiple AI Providers**: Choose between Gemini, OpenAI (GPT-4), Claude (Anthropic), and Hugging Face models
-- **Code Mode**: Provides definitive insights for general software development using commit messages, code comments, and surrounding context
 - **Context-Aware Responses**: Automatically adapts responses based on detected libraries, patterns, and terminology
 - **Flexible Configuration**: Switch between providers and models based on your preferences and requirements
 
@@ -32,7 +20,6 @@
 
 - **Contextual Conversations**: Chat with AI about your code with automatic context from CodeArch analysis
 - **Multi-Context Support**: Add file contents, highlighted code, git diffs, and analysis results to chat conversations
-- **Adaptive AI Responses**: Automatically adapts conversation style based on your selected provider and code context
 - **GitHub Copilot-Style UI**: Clean, minimal interface with example prompts and capability discovery
 
 ### **Interactive Timeline & GitHub Integration**
@@ -42,13 +29,9 @@
 - **Expandable Details**: Click to see full commit diffs, PR discussions, and historical context
 - **Direct GitHub Links**: Jump to GitHub for complete context
 
-### **Polished User Experience**
-
-- **Professional UI**: Clean, VS Code-native design optimized for sidebar viewing
-- **Responsive Layout**: Efficiently uses available space with smart text wrapping and spacing
-- **Secure Storage**: Uses VS Code's secure credential storage for API keys
-
 ## How It Works
+
+### Code Archaeology Workflow
 
 1. **Select Code**: Highlight any block of code in a Git repository
 2. **Right-Click**: Choose "CodeArch: Analyze Selection" from the context menu
@@ -79,13 +62,15 @@
    gh auth login
    ```
 
-4. **Google AI Studio API Key**:
-   - Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
-   - Create a new API key (starts with "AIza...")
+4. **AI Provider API Key**: Choose one:
+   - **Google AI Studio**: [makersuite.google.com/app/apikey](https://makersuite.google.com/app/apikey) (Free tier available)
+   - **OpenAI**: [platform.openai.com/api-keys](https://platform.openai.com/api-keys) (Paid API)
+   - **Anthropic Claude**: [console.anthropic.com](https://console.anthropic.com) (Paid API)
+   - **Hugging Face**: [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) (Free with rate limits)
 
 ## Installation
 
-### From VS Code Marketplace (Coming Soon)
+### From VS Code Marketplace
 
 1. Search for "CodeArch" in VS Code Extensions
 2. Click Install
@@ -101,49 +86,27 @@
 
 1. **Configure Your AI Provider**
 
-   - Open VS Code Settings (Ctrl+Comma > Extensions > CodeArch)
+   - Open VS Code Settings (`Ctrl+,` → Extensions → CodeArch)
    - Set your AI provider (Gemini/OpenAI/Claude/Hugging Face)
    - The extension will prompt you to enter your API key when first used
 
 2. **Select Your Model**
 
-   - Use Ctrl+Shift+P and run "CodeArch: Select Model"
+   - Use `Ctrl+Shift+P` and run "CodeArch: Select Model"
    - Choose from available models for your provider
-   - Models are automatically filtered based on your selected AI provider
 
 3. **Start Analyzing**
 
-   - Right-click any file and select "Analyze with CodeArch"
-   - Use Ctrl+Shift+P and run "CodeArch: Analyze Current File"
-   - Open the chat panel for interactive analysis
+   - Right-click on selected code and choose "CodeArch: Analyze Selection"
+   - Open the CodeArch sidebar panel for results and chat
 
 4. **Verify Setup**: CodeArch automatically checks dependencies on first use
 
-## Usage Examples
+## Usage Example
 
-### Understanding Complex Trading Logic
-
-```python
-def calculate_portfolio_var(positions, correlation_matrix, confidence_level=0.95):
-    # Complex VaR calculation - why this specific approach?
-    portfolio_variance = np.dot(positions.T, np.dot(correlation_matrix, positions))
-    portfolio_std = np.sqrt(portfolio_variance)
-    z_score = norm.ppf(confidence_level)
-    return portfolio_std * z_score
-```
-
-**CodeArch Analysis Result (Finance Mode):**
-
-> **WHY THIS CODE EXISTS:**
-> This Value-at-Risk implementation uses the parametric approach to meet regulatory risk reporting requirements. The correlation matrix method was chosen over Monte Carlo simulation for daily risk calculations due to performance requirements specified in issue #89.
-
-> **FINANCIAL CONTEXT:**
-> This VaR calculation follows Basel III guidelines for market risk assessment. The 95% confidence level is mandated by internal risk policies, and the correlation matrix approach ensures sub-second calculation times for the real-time risk dashboard.
-
-### Investigating Performance Optimizations
+### Understanding Complex Code
 
 ```javascript
-// You see this confusing function and wonder why it's so complex
 function debounceWithImmediate(func, wait, immediate) {
   var timeout;
   return function executedFunction() {
@@ -161,30 +124,13 @@ function debounceWithImmediate(func, wait, immediate) {
 }
 ```
 
-**CodeArch Analysis Result (Code Mode):**
+**CodeArch Analysis Result:**
 
 > **WHY THIS CODE EXISTS:**
 > This debounce implementation handles both trailing and leading edge execution patterns to solve performance issues with rapid user input events. The immediate flag was added after issue #156 revealed that search autocomplete needed instant feedback on the first keystroke.
 
 > **EVOLUTION & DECISIONS:**
 > Originally implemented as simple trailing debounce, but PR #234 added immediate execution support when users complained about delayed search results. The complex timeout logic ensures both patterns work correctly without interference.
-
-### Financial Chat Interface Example
-
-```
-User: "How can I optimize this backtesting strategy?"
-[Code context automatically added from current selection]
-
-CodeArch (Finance Mode): "Based on your Zipline strategy code, I can see several optimization opportunities:
-
-1. **Vectorization**: Your current position sizing logic uses loops. Consider using pandas vectorized operations for the moving average calculations.
-
-2. **Commission Model**: You're using the default commission model. For more accurate backtesting, implement a tiered commission structure based on your actual broker fees.
-
-3. **Slippage Modeling**: Consider adding realistic slippage models, especially for the momentum-based entries you're using.
-
-Would you like me to show specific code improvements for any of these areas?"
-```
 
 ## What Makes CodeArch Different
 
@@ -193,126 +139,47 @@ Would you like me to show specific code improvements for any of these areas?"
 - Manually dig through `git log` and `git blame`
 - Search for related PRs and issues
 - Piece together context from multiple sources
-- Guess at the reasoning behind changes
 - Spend 15-30 minutes per investigation
-- No specialized financial domain knowledge
-- Separate tools for code analysis and development chat
 
 ### CodeArch Approach
 
 - Select code → right-click → instant analysis
 - Evolution-based tracking finds exact relevant commits
-- AI confidently explains purpose based on rich context
-- Complete timeline with GitHub integration
+- AI explains purpose based on rich context
 - Get definitive answers in seconds
-- **Dual-mode intelligence**: General development + financial expertise
-- **Integrated chat interface**: Discuss code with context-aware AI
-- **Automatic context addition**: Seamlessly add analysis, code, and git data to conversations
-
-## Advanced Features
-
-### Evolution-Based Tracking
-
-Unlike tools that rely on text matching, CodeArch uses git's internal line tracking to:
-
-- Handle file renames and moves seamlessly
-- Track lines through refactoring and reformatting
-- Find relevant changes even when code has been heavily modified
-
-### Smart Context Analysis
-
-The AI analyzes:
-
-- **Selected code** and surrounding lines for context
-- **Commit messages** explaining the intent behind changes
-- **PR descriptions** detailing problems and solutions
-- **Code comments** providing developer insights
-- **Related issues** linked to PRs for full background
-
-### Financial Domain Intelligence
-
-CodeArch recognizes and provides specialized analysis for:
-
-- **Trading Libraries**: Zipline, Backtrader, QuantLib, pandas-ta
-- **Market Data Patterns**: OHLCV structures, time series analysis, technical indicators
-- **Risk Management**: VaR calculations, portfolio optimization, correlation analysis
-- **Financial Compliance**: Regulatory requirements, audit trails, risk reporting
-
-### Intelligent Chat System
-
-- **Multi-Context Support**: Add files, code selections, git diffs, and analysis results
-- **Mode-Aware Responses**: Automatically adapts based on finance vs. general development context
-- **GitHub Copilot-Style Interface**: Clean, minimal design with capability discovery
-- **Context Management**: Easy addition and removal of conversation context
-
-### Intelligent Diff Filtering
-
-Instead of showing entire commit diffs, CodeArch:
-
-- Extracts only hunks that intersected with your selected lines
-- Uses mathematical line range analysis for precision
-- Handles complex git history with multiple file paths
-- Provides focused, relevant change information
+- Integrated chat interface for follow-up questions
 
 ## Configuration
 
-### Setting Up AI Provider
+### AI Provider Setup
 
 1. **Configure API Key**: Run `CodeArch: Configure API Key` from Command Palette
-2. **Choose Provider**: Select your preferred AI provider:
-   - **Gemini** (Google AI Studio) - Free tier available, excellent for code analysis
-   - **OpenAI** - GPT-4 and other OpenAI models (requires paid API)
-   - **Claude** - Anthropic Claude models (requires paid API)
-   - **Hugging Face** - Open source models (free with rate limits)
-
-### Changing Providers/Models (Without Re-entering API Key)
-
-**Easy Method**: Use VS Code Settings
-
-1. Open `File > Preferences > Settings` (or `Ctrl+,`)
-2. Search for "CodeArch"
-3. Change the `CodeArch: AI Provider` dropdown
-4. Optionally change the model for your selected provider
-5. Your API keys remain saved - no need to re-enter!
-
-### Configuration
-
-**Settings (Ctrl+Comma > Extensions > CodeArch)**:
-
-- **`CodeArch.aiProvider`**: Choose between `gemini`, `openai`, `claude`, `huggingface`
-
-**Model Selection (Ctrl+Shift+P > "CodeArch: Select Model")**:
-
-- Models are dynamically shown based on your selected AI provider
-- Easy switching between available models without cluttering settings
-- Smart defaults: GPT-4o-mini (OpenAI), Gemini 2.0 Flash (Google), Claude Sonnet 4 (Anthropic)
+2. **Choose Provider**: Open Settings (`Ctrl+,`) → Search "CodeArch" → Select AI Provider
+3. **Select Model**: Use `Ctrl+Shift+P` → "CodeArch: Select Model"
 
 ### Available Models by Provider
 
 **Gemini Models**:
 
-- **Gemini 2.0 Flash** (default) - Fast and efficient - best for speed
+- **Gemini 2.0 Flash** (default) - Fast and efficient
 - **Gemini 2.5 Flash** - Advanced flash model
 - **Gemini 2.5 Pro** - Most capable Gemini model
 
 **OpenAI Models**:
 
-- **GPT-4o Mini** (default) - Fast, cost-effective, perfect for code analysis
-- **GPT-4o** - More capable but slower than mini
-- **GPT-5 Mini** - Latest tech but slower
-- **GPT-5** - Maximum capabilities but slowest
+- **GPT-4o Mini** (default) - Fast, cost-effective
+- **GPT-4o** - More capable
+- **GPT-4** - Latest stable model
 
 **Claude Models**:
 
-- **Claude Sonnet 4** (default) - Best balance of performance and cost
-- **Claude Sonnet 4.5** - Latest and most capable Sonnet model
-- **Claude Sonnet 3.7** - Previous generation Sonnet model
+- **Claude Sonnet 3.5** (default) - Best balance of performance and cost
+- **Claude Haiku** - Fastest Claude model
+- **Claude Opus** - Most capable Claude model
 
 **Hugging Face**:
 
-- **Custom Model ID** - Enter any Hugging Face model (e.g., `microsoft/DialoGPT-large`)
-
-> **Note**: GPT-5 models use different API parameters and are slower than GPT-4 models. The extension automatically handles these differences.
+- **Custom Model ID** - Enter any Hugging Face model ID
 
 ## Troubleshooting
 
@@ -336,26 +203,13 @@ Instead of showing entire commit diffs, CodeArch:
 **"API key invalid"**
 
 - Reconfigure API key: Command Palette → "CodeArch: Configure API Key"
-- Verify key starts with "AIza" (Google AI Studio key)
 - Check API quota and billing status
 
 **"No evolution data found"**
 
 - File might be newly created
-- Ensure local repository is up-to-date with `git pull`
+- Ensure repository is up-to-date with `git pull`
 - Selected code might not have substantial git history
-
-**"Chat context not working"**
-
-- Ensure you're in the correct mode (Code/Finance) for your content
-- Try manually adding context using the + button in the chat interface
-- Check that analysis results are available before adding them to chat
-
-**"Finance mode not recognizing financial code"**
-
-- Ensure your code uses recognizable financial libraries (pandas, numpy, zipline, etc.)
-- Try manually switching to Finance mode using the toggle buttons
-- Financial detection works best with trading algorithms and market data processing code
 
 ### Debug Information
 
@@ -375,8 +229,8 @@ Created for **HackRice 2025**. To contribute:
 ### Development Setup
 
 ```bash
-git clone <repository>
-cd CodeArch
+git clone https://github.com/justi-lai/HackRice2025.git
+cd HackRice2025
 npm install
 npm run compile
 # Open in VS Code and press F5 to debug
@@ -404,7 +258,6 @@ limitations under the License.
 
 - **HackRice 2025** - Where this project was born
 - **VS Code Extension API** - Excellent development platform
-- **Google Gemini AI** - Powering intelligent code and financial analysis
+- **AI Providers** - Gemini, OpenAI, Claude, and Hugging Face for powering intelligent code analysis
 - **GitHub CLI** - Seamless GitHub integration
 - **Git** - The foundation that makes code archaeology possible
-- **Financial Development Community** - For inspiring the dual-mode capabilities
