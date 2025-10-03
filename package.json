@@ -2,7 +2,7 @@
   "name": "codearch",
   "displayName": "CodeArch: Code Archaeology Assistant",
   "description": "Automates code archaeology by analyzing git history, GitHub PRs, and generating AI-powered summaries of code intent",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "JustinLai",
   "license": "Apache-2.0",
   "repository": {
