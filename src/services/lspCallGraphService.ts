@@ -17,6 +17,7 @@ export interface LSPContext {
     references: ReferenceInfo;
     symbols: vscode.DocumentSymbol[];
     workspaceSymbols: vscode.SymbolInformation[];
+    symbolAtPosition?: string; // The symbol name found at the search position
 }
 
 export class LSPCallGraphService {
@@ -77,7 +78,8 @@ export class LSPCallGraphService {
                     callHierarchy,
                     references,
                     symbols,
-                    workspaceSymbols
+                    workspaceSymbols,
+                    symbolAtPosition: containingSymbol.name
                 };
             } else {
                 console.log(`[DEBUG] No containing symbol found, using fallback position`);
@@ -99,7 +101,8 @@ export class LSPCallGraphService {
                     callHierarchy,
                     references,
                     symbols,
-                    workspaceSymbols
+                    workspaceSymbols,
+                    symbolAtPosition: undefined
                 };
             }
         } catch (error) {
@@ -112,7 +115,8 @@ export class LSPCallGraphService {
                     implementations: []
                 },
                 symbols: [],
-                workspaceSymbols: []
+                workspaceSymbols: [],
+                symbolAtPosition: undefined
             };
         }
     }

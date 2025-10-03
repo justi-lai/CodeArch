@@ -101,6 +101,11 @@
           ],
           "default": "gemini-2.0-flash-exp",
           "description": "Gemini model to use for generating summaries. Choose from the latest Gemini 2.0 and 2.5 models for optimal performance and capabilities."
+        },
+        "codescribe.enableRenameDetection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic detection of function renames in git history. When enabled, CodeScribe will trace a function's history even if it was renamed, providing more complete analysis at the cost of slightly longer processing time."
         }
       }
     }

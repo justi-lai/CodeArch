@@ -64,8 +64,30 @@ export class EnhancedContextBuilder {
             // Calculate criticality based on LSP data
             const criticality = this.lspService.calculateCriticality(lspContext);
 
+            // Debug: Log AST structure
+            console.log(`[DEBUG] AST Analysis Results:`);
+            console.log(`[DEBUG] - Language: ${astStructure.language}`);
+            console.log(`[DEBUG] - Functions found: ${astStructure.functions.length}`);
+            if (astStructure.functions.length > 0) {
+                console.log(`[DEBUG] - Function names: [${astStructure.functions.map(f => f.name).join(', ')}]`);
+                astStructure.functions.forEach((func, i) => {
+                    const funcStart = func.startPosition.row + 1;
+                    const funcEnd = func.endPosition.row + 1;
+                    console.log(`[DEBUG]   ${i + 1}. ${func.name}: lines ${funcStart}-${funcEnd}`);
+                });
+            }
+            console.log(`[DEBUG] - Classes found: ${astStructure.classes.length}`);
+            console.log(`[DEBUG] - Variables found: ${astStructure.variables.length}`);
+
             // Find the containing function and its initial commit
-            const containingFunctionName = this.findContainingFunctionName(astStructure, startLine, endLine);
+            let containingFunctionName = this.findContainingFunctionName(astStructure, startLine, endLine);
+            
+            // Fallback: If AST didn't find a function but LSP found a symbol, use that
+            if (!containingFunctionName && lspContext.symbolAtPosition) {
+                console.log(`[DEBUG] AST analysis failed to find function, using LSP symbol: ${lspContext.symbolAtPosition}`);
+                containingFunctionName = lspContext.symbolAtPosition;
+            }
+            
             let initialCommit: InitialCommitInfo | undefined;
             
             if (containingFunctionName) {
@@ -361,22 +383,68 @@ Use plain text values, no markdown formatting.`;
             return 'Initial commit information could not be retrieved for this function.';
         }
 
-        return `INITIAL COMMIT (Original Creation Context):
+        let context = `INITIAL COMMIT (Original Creation Context):
 - Commit: ${initialCommit.hash.substring(0, 8)} by ${initialCommit.author}
 - Message: "${initialCommit.message}"
 - Function: "${initialCommit.functionName}"
-- Date: ${initialCommit.date}
+- Date: ${initialCommit.date}`;
 
-This commit shows when and why this function was first created.`;
+        // Add rename history if present
+        if (initialCommit.wasRenamed && initialCommit.renameHistory && initialCommit.renameHistory.length > 0) {
+            context += `\n\nFUNCTION RENAME HISTORY:`;
+            context += `\nThis function has been renamed ${initialCommit.renameHistory.length} time(s):`;
+            
+            // Build the evolution chain
+            const evolutionChain = [];
+            if (initialCommit.previousNames && initialCommit.previousNames.length > 0) {
+                evolutionChain.push(...initialCommit.previousNames.reverse());
+            }
+            evolutionChain.push(initialCommit.functionName);
+            
+            context += `\nEvolution: ${evolutionChain.join(' → ')}`;
+            
+            // Add details for each rename
+            context += `\n\nRename Details:`;
+            initialCommit.renameHistory.forEach((rename, index) => {
+                context += `\n${index + 1}. "${rename.oldName}" → "${rename.newName}"`;
+                context += `\n   - Commit: ${rename.commit.substring(0, 8)}`;
+                context += `\n   - Date: ${rename.date}`;
+            });
+            
+            context += `\n\nNote: This analysis traced the function through its renames to find the true origin.`;
+        }
+
+        context += `\n\nThis commit shows when and why this function was first created.`;
+        return context;
     }
 
     private formatRecentChangesContext(gitAnalysis: GitAnalysisResult, initialCommit?: InitialCommitInfo): string {
         let context = '';
         
-        // Recent commits (exclude initial commit)
+        // Add rename history as part of evolution if available
+        if (initialCommit?.wasRenamed && initialCommit.renameHistory && initialCommit.renameHistory.length > 0) {
+            context += `FUNCTION NAME EVOLUTION:\n`;
+            const evolutionChain = [];
+            if (initialCommit.previousNames && initialCommit.previousNames.length > 0) {
+                evolutionChain.push(...initialCommit.previousNames.reverse());
+            }
+            evolutionChain.push(initialCommit.functionName);
+            context += `Name Evolution: ${evolutionChain.join(' → ')}\n`;
+            
+            initialCommit.renameHistory.forEach((rename, index) => {
+                context += `- Rename ${index + 1}: "${rename.oldName}" → "${rename.newName}" (${rename.commit.substring(0, 8)})\n`;
+            });
+            context += '\n';
+        }
+        
+        // Recent commits (exclude initial commit and rename commits)
         if (gitAnalysis.commits.length > 0) {
+            const renameCommitHashes = initialCommit?.renameHistory ? 
+                initialCommit.renameHistory.map(r => r.commit) : [];
+            
             const recentCommits = gitAnalysis.commits.filter(commit => 
-                !initialCommit || commit.hash !== initialCommit.hash
+                (!initialCommit || commit.hash !== initialCommit.hash) &&
+                !renameCommitHashes.includes(commit.hash)
             );
             
             if (recentCommits.length > 0) {

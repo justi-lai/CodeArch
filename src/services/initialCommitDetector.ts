@@ -2,6 +2,13 @@ import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import * as path from 'path';
 
+export interface RenameInfo {
+    oldName: string;
+    newName: string;
+    commit: string;
+    date: string;
+}
+
 export interface InitialCommitInfo {
     hash: string;
     author: string;
@@ -9,6 +16,10 @@ export interface InitialCommitInfo {
     message: string;
     functionName: string;
     filePath: string;
+    // Rename detection fields
+    previousNames?: string[];
+    renameHistory?: RenameInfo[];
+    wasRenamed?: boolean;
 }
 
 export interface FunctionContext {
@@ -22,31 +33,65 @@ export class InitialCommitDetector {
     /**
      * Find the initial commit that introduced a specific function
      * Uses git log -S to find when the function name was first added
+     * Supports rename detection to trace function history
      */
     async findInitialCommit(
         functionName: string, 
         filePath: string, 
         workspaceRoot: string
     ): Promise<InitialCommitInfo | null> {
+        const enableRenameDetection = this.isRenameDetectionEnabled();
+        console.log(`[DEBUG] Rename detection ${enableRenameDetection ? 'enabled' : 'disabled'}`);
+        
+        return await this.findInitialCommitRecursive(
+            functionName, 
+            filePath, 
+            workspaceRoot, 
+            [], 
+            [], 
+            0, 
+            enableRenameDetection
+        );
+    }
+
+    /**
+     * Recursive implementation of findInitialCommit with rename detection
+     */
+    private async findInitialCommitRecursive(
+        functionName: string, 
+        filePath: string, 
+        workspaceRoot: string, 
+        renameHistory: RenameInfo[],
+        previousNames: string[],
+        depth: number,
+        enableRenameDetection: boolean,
+        maxDepth: number = 5
+    ): Promise<InitialCommitInfo | null> {
         try {
-            console.log(`[DEBUG] Finding initial commit for function "${functionName}" in ${filePath}`);
+            console.log(`[DEBUG] Finding initial commit (depth ${depth}) for function "${functionName}" in ${filePath}`);
+            console.log(`[DEBUG] Rename history so far: [${previousNames.join(' -> ')}] -> ${functionName}`);
             
-            // First, let's test that git is working at all
-            try {
-                const versionOutput = await this.runGitCommand(['--version'], workspaceRoot);
-                console.log(`[DEBUG] Git version check: "${versionOutput.trim()}"`);
-            } catch (error) {
-                console.error(`[DEBUG] Git version check failed:`, error);
+            // Depth limit to prevent infinite recursion
+            if (depth >= maxDepth) {
+                console.log(`[DEBUG] Maximum rename depth (${maxDepth}) reached for "${functionName}"`);
                 return null;
+            }
+            
+            // First time only: test that git is working
+            if (depth === 0) {
+                try {
+                    const versionOutput = await this.runGitCommand(['--version'], workspaceRoot);
+                    console.log(`[DEBUG] Git version check: "${versionOutput.trim()}"`);
+                } catch (error) {
+                    console.error(`[DEBUG] Git version check failed:`, error);
+                    return null;
+                }
             }
             
             // Get the relative path from workspace root
             const relativePath = path.relative(workspaceRoot, filePath);
             
             // Use git log -S to find commits where the function name count changed
-            // --reverse gives us the earliest first, -n 1 gives us just the first result
-            // Try searching for the full function definition pattern first
-            // Start with minimal args that match your working terminal command
             const args = [
                 'log',
                 '--reverse',
@@ -102,18 +147,80 @@ export class InitialCommitDetector {
             }
 
             const [hash, author, date, ...messageParts] = parts;
-            const message = messageParts.join('|'); // Rejoin in case message had | chars
+            const message = messageParts.join('|');
+            const commitHash = hash.trim();
 
+            console.log(`[DEBUG] Found commit for "${functionName}": ${commitHash.substring(0, 8)} - ${message}`);
+
+            // If rename detection is enabled and this isn't already a deep search,
+            // check if this commit contains a rename
+            if (enableRenameDetection && depth < maxDepth) {
+                console.log(`[DEBUG] Checking for renames in commit ${commitHash.substring(0, 8)}`);
+                
+                const diffOutput = await this.getCommitDiff(commitHash, filePath, workspaceRoot);
+                const oldFunctionName = this.parseRenameFromDiff(diffOutput, functionName, filePath);
+                
+                if (oldFunctionName && oldFunctionName !== functionName) {
+                    console.log(`[DEBUG] Detected rename: "${oldFunctionName}" -> "${functionName}" in commit ${commitHash.substring(0, 8)}`);
+                    
+                    // Create rename info
+                    const renameInfo: RenameInfo = {
+                        oldName: oldFunctionName,
+                        newName: functionName,
+                        commit: commitHash,
+                        date: date.trim()
+                    };
+                    
+                    // Recursively search for the old function name
+                    const olderCommit = await this.findInitialCommitRecursive(
+                        oldFunctionName,
+                        filePath,
+                        workspaceRoot,
+                        [renameInfo, ...renameHistory],
+                        [oldFunctionName, ...previousNames],
+                        depth + 1,
+                        enableRenameDetection,
+                        maxDepth
+                    );
+                    
+                    if (olderCommit) {
+                        // Merge the rename history
+                        olderCommit.renameHistory = [...(olderCommit.renameHistory || []), renameInfo];
+                        olderCommit.previousNames = [...(olderCommit.previousNames || []), oldFunctionName];
+                        olderCommit.wasRenamed = true;
+                        return olderCommit;
+                    }
+                    // If no older commit found, fall through to return current commit
+                }
+            }
+
+            // Create the final result
             const initialCommit: InitialCommitInfo = {
-                hash: hash.trim(),
+                hash: commitHash,
                 author: author.trim(),
                 date: date.trim(),
                 message: message.trim(),
                 functionName,
-                filePath
+                filePath,
+                renameHistory: renameHistory.length > 0 ? renameHistory : undefined,
+                previousNames: previousNames.length > 0 ? previousNames : undefined,
+                wasRenamed: renameHistory.length > 0
             };
 
-            console.log(`[DEBUG] Found initial commit for "${functionName}": ${hash.substring(0, 8)} - ${message}`);
+            console.log(`[DEBUG] Final initial commit for "${functionName}": ${commitHash.substring(0, 8)} - ${message.trim()}`);
+            if (renameHistory.length > 0) {
+                // Build the correct chain: start with original function, follow the renames
+                const chain = [functionName]; // Start with the original function (calc_interest)
+                
+                // The renameHistory array is already in chronological order:
+                // [calc_interest -> calculate_simple_interest, calculate_simple_interest -> compute_interest_amount]
+                // So we just need to add each newName in order
+                for (const rename of renameHistory) {
+                    chain.push(rename.newName);
+                }
+                console.log(`[DEBUG] Rename chain: ${chain.join(' -> ')}`);
+            }
+            
             return initialCommit;
 
         } catch (error) {
@@ -292,6 +399,221 @@ export class InitialCommitDetector {
             
         } catch (error) {
             console.log(`[DEBUG] git blame strategy failed: ${error}`);
+            return '';
+        }
+    }
+
+    /**
+     * Check if rename detection is enabled in settings
+     */
+    private isRenameDetectionEnabled(): boolean {
+        const config = vscode.workspace.getConfiguration('codescribe');
+        return config.get<boolean>('enableRenameDetection', true);
+    }
+
+    /**
+     * Parse a git diff to detect function renames
+     * Looks for patterns like:
+     * - def old_function_name(
+     * + def new_function_name(
+     */
+    private parseRenameFromDiff(
+        diffOutput: string, 
+        currentFunctionName: string, 
+        filePath: string
+    ): string | null {
+        console.log(`[DEBUG] Analyzing diff for renames of "${currentFunctionName}"`);
+        
+        // Different patterns for different languages
+        const fileExtension = path.extname(filePath).toLowerCase();
+        const patterns = this.getRenamePatterns(fileExtension);
+        
+        for (const pattern of patterns) {
+            const renameMatch = this.findRenameInDiff(diffOutput, currentFunctionName, pattern);
+            if (renameMatch) {
+                console.log(`[DEBUG] Found rename: "${renameMatch}" -> "${currentFunctionName}"`);
+                return renameMatch;
+            }
+        }
+        
+        console.log(`[DEBUG] No rename detected for "${currentFunctionName}"`);
+        return null;
+    }
+
+    /**
+     * Get language-specific rename patterns
+     */
+    private getRenamePatterns(fileExtension: string): Array<{remove: RegExp, add: RegExp}> {
+        switch (fileExtension) {
+            case '.py':
+                return [
+                    {
+                        remove: /^-\s*def\s+(\w+)\s*\(/gm,
+                        add: /^\+\s*def\s+(\w+)\s*\(/gm
+                    },
+                    {
+                        remove: /^-\s*class\s+(\w+)\s*[\(:]?/gm,
+                        add: /^\+\s*class\s+(\w+)\s*[\(:]?/gm
+                    }
+                ];
+            case '.js':
+            case '.ts':
+                return [
+                    {
+                        remove: /^-\s*function\s+(\w+)\s*\(/gm,
+                        add: /^\+\s*function\s+(\w+)\s*\(/gm
+                    },
+                    {
+                        remove: /^-\s*(\w+)\s*:\s*function\s*\(/gm,
+                        add: /^\+\s*(\w+)\s*:\s*function\s*\(/gm
+                    },
+                    {
+                        remove: /^-\s*(\w+)\s*\([^)]*\)\s*=>/gm,
+                        add: /^\+\s*(\w+)\s*\([^)]*\)\s*=>/gm
+                    }
+                ];
+            case '.java':
+            case '.c':
+            case '.cpp':
+            case '.cs':
+                return [
+                    {
+                        remove: /^-\s*(?:public|private|protected|static|\s)*\w+\s+(\w+)\s*\(/gm,
+                        add: /^\+\s*(?:public|private|protected|static|\s)*\w+\s+(\w+)\s*\(/gm
+                    }
+                ];
+            default:
+                // Generic pattern for any language
+                return [
+                    {
+                        remove: /^-.*?(\w+)\s*\(/gm,
+                        add: /^\+.*?(\w+)\s*\(/gm
+                    }
+                ];
+        }
+    }
+
+    /**
+     * Find a rename in the diff using the given patterns
+     */
+    private findRenameInDiff(
+        diffOutput: string, 
+        currentFunctionName: string, 
+        pattern: {remove: RegExp, add: RegExp}
+    ): string | null {
+        const removedFunctions: string[] = [];
+        const addedFunctions: string[] = [];
+        
+        // Find all removed functions
+        let match;
+        while ((match = pattern.remove.exec(diffOutput)) !== null) {
+            removedFunctions.push(match[1]);
+        }
+        
+        // Reset regex state
+        pattern.remove.lastIndex = 0;
+        
+        // Find all added functions
+        while ((match = pattern.add.exec(diffOutput)) !== null) {
+            addedFunctions.push(match[1]);
+        }
+        
+        // Reset regex state
+        pattern.add.lastIndex = 0;
+        
+        console.log(`[DEBUG] Removed functions: [${removedFunctions.join(', ')}]`);
+        console.log(`[DEBUG] Added functions: [${addedFunctions.join(', ')}]`);
+        
+        // If current function was added and there's exactly one removed function,
+        // it's likely a rename
+        if (addedFunctions.includes(currentFunctionName) && removedFunctions.length === 1) {
+            return removedFunctions[0];
+        }
+        
+        // More sophisticated heuristic: find the most similar name
+        if (addedFunctions.includes(currentFunctionName) && removedFunctions.length > 0) {
+            return this.findMostSimilarName(currentFunctionName, removedFunctions);
+        }
+        
+        return null;
+    }
+
+    /**
+     * Find the most similar function name using simple string similarity
+     */
+    private findMostSimilarName(targetName: string, candidates: string[]): string | null {
+        let bestMatch: string | null = null;
+        let bestScore = 0;
+        
+        for (const candidate of candidates) {
+            const score = this.calculateSimilarity(targetName, candidate);
+            if (score > bestScore && score > 0.3) { // Minimum similarity threshold
+                bestScore = score;
+                bestMatch = candidate;
+            }
+        }
+        
+        return bestMatch;
+    }
+
+    /**
+     * Calculate string similarity using simple character-based approach
+     */
+    private calculateSimilarity(str1: string, str2: string): number {
+        const longer = str1.length > str2.length ? str1 : str2;
+        const shorter = str1.length > str2.length ? str2 : str1;
+        
+        if (longer.length === 0) {
+            return 1.0;
+        }
+        
+        const editDistance = this.calculateEditDistance(longer, shorter);
+        return (longer.length - editDistance) / longer.length;
+    }
+
+    /**
+     * Calculate Levenshtein distance between two strings
+     */
+    private calculateEditDistance(str1: string, str2: string): number {
+        const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
+        
+        for (let i = 0; i <= str1.length; i++) {
+            matrix[0][i] = i;
+        }
+        
+        for (let j = 0; j <= str2.length; j++) {
+            matrix[j][0] = j;
+        }
+        
+        for (let j = 1; j <= str2.length; j++) {
+            for (let i = 1; i <= str1.length; i++) {
+                if (str1[i - 1] === str2[j - 1]) {
+                    matrix[j][i] = matrix[j - 1][i - 1];
+                } else {
+                    matrix[j][i] = Math.min(
+                        matrix[j - 1][i - 1] + 1, // substitution
+                        matrix[j][i - 1] + 1,     // insertion
+                        matrix[j - 1][i] + 1      // deletion
+                    );
+                }
+            }
+        }
+        
+        return matrix[str2.length][str1.length];
+    }
+
+    /**
+     * Get the diff for a specific commit
+     */
+    private async getCommitDiff(commitHash: string, filePath: string, workspaceRoot: string): Promise<string> {
+        const relativePath = path.relative(workspaceRoot, filePath);
+        const args = ['show', commitHash, '--', relativePath];
+        console.log(`[DEBUG] Getting diff for commit ${commitHash}: git ${args.join(' ')}`);
+        
+        try {
+            return await this.runGitCommand(args, workspaceRoot);
+        } catch (error) {
+            console.log(`[DEBUG] Failed to get commit diff: ${error}`);
             return '';
         }
     }
