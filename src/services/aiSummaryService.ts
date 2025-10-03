@@ -54,7 +54,7 @@ export class AiSummaryService {
                         placeHolder: 'microsoft/DialoGPT-large'
                     });
                     if (!customModel || customModel.trim() === '') {
-                        throw new Error('Hugging Face model ID is required. Please use "CodeScribe: Select Model" command to configure.');
+                        throw new Error('Hugging Face model ID is required. Please use "codearch: Select Model" command to configure.');
                     }
                     model = customModel;
                 }
@@ -68,7 +68,7 @@ export class AiSummaryService {
 
     private async getStoredModel(provider: string): Promise<string | undefined> {
         if (this.context) {
-            return this.context.globalState.get(`codescribe.model.${provider}`);
+            return this.context.globalState.get(`codearch.model.${provider}`);
         }
         return undefined;
     }
@@ -121,7 +121,7 @@ export class AiSummaryService {
         startLine: number,
         endLine: number
     ): Promise<string> {
-        const config = vscode.workspace.getConfiguration('codescribe');
+        const config = vscode.workspace.getConfiguration('codearch');
         const provider = config.get<string>('aiProvider', 'gemini');
         const providerConfig = await this.getProviderConfig(provider);
         
@@ -175,7 +175,7 @@ export class AiSummaryService {
         startLine?: number,
         endLine?: number
     ): Promise<string> {
-        const config = vscode.workspace.getConfiguration('codescribe');
+        const config = vscode.workspace.getConfiguration('codearch');
         const provider = config.get<string>('aiProvider', 'gemini');
         const providerConfig = await this.getProviderConfig(provider);
         

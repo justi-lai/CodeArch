@@ -59,7 +59,7 @@ export interface TimelineItem {
     data: CommitInfo | PullRequestInfo;
 }
 
-export interface CodeScribeResults {
+export interface CodeArchResults {
     summary: string;
     analysisResult: GitAnalysisResult;
     selectedText: string;

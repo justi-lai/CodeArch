@@ -27,7 +27,7 @@ export class ChatService {
     private async getSelectedModel(provider: string): Promise<string> {
         if (!this.context) {
             // Fallback to config if no context available
-            const config = vscode.workspace.getConfiguration('codescribe');
+            const config = vscode.workspace.getConfiguration('codearch');
             switch (provider) {
                 case 'gemini': return config.get<string>('geminiModel', 'gemini-2.0-flash-exp');
                 case 'openai': return config.get<string>('openaiModel', 'gpt-4o-mini');
@@ -38,7 +38,7 @@ export class ChatService {
         }
 
         // Get from global state (preferred method)
-        const storedModel = await this.context.globalState.get(`codescribe.model.${provider}`) as string;
+        const storedModel = await this.context.globalState.get(`codearch.model.${provider}`) as string;
         if (storedModel) {
             return storedModel;
         }
@@ -60,11 +60,11 @@ export class ChatService {
         previousMessages: ChatMessage[] = [],
         apiKey?: string
     ): Promise<string> {
-        const config = vscode.workspace.getConfiguration('codescribe');
+        const config = vscode.workspace.getConfiguration('codearch');
         const provider = config.get<string>('aiProvider', 'gemini');
 
         if (!apiKey || apiKey.trim() === '') {
-            throw new Error(`${provider} API key not configured. Please run "CodeScribe: Configure API Key" command first.`);
+            throw new Error(`${provider} API key not configured. Please run "codearch: Configure API Key" command first.`);
         }
 
         const prompt = this._buildPrompt(message, context, previousMessages);
@@ -97,11 +97,11 @@ export class ChatService {
         onComplete?: () => void,
         onError?: (error: Error) => void
     ): Promise<void> {
-        const config = vscode.workspace.getConfiguration('codescribe');
+        const config = vscode.workspace.getConfiguration('codearch');
         const provider = config.get<string>('aiProvider', 'gemini');
 
         if (!apiKey || apiKey.trim() === '') {
-            const error = new Error(`${provider} API key not configured. Please run "CodeScribe: Configure API Key" command first.`);
+            const error = new Error(`${provider} API key not configured. Please run "codearch: Configure API Key" command first.`);
             onError?.(error);
             return;
         }
@@ -672,7 +672,7 @@ export class ChatService {
     }
 
     private _buildCodePrompt(): string {
-        return `You are CodeScribe, an expert software engineering assistant specializing in code analysis, debugging, and development guidance. You help developers understand, improve, and work with their code.
+        return `You are codearch, an expert software engineering assistant specializing in code analysis, debugging, and development guidance. You help developers understand, improve, and work with their code.
 
 **YOUR CAPABILITIES:**
 - Code review and analysis

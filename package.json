@@ -1,9 +1,9 @@
 {
-  "name": "codescribe",
-  "displayName": "CodeScribe: The Code Archeology Assistant",
-  "description": "Automates code archeology by analyzing git history, GitHub PRs, and generating AI-powered summaries of code intent",
+  "name": "codearch",
+  "displayName": "CodeArch: Code Archaeology Assistant",
+  "description": "Automates code archaeology by analyzing git history, GitHub PRs, and generating AI-powered summaries of code intent",
   "version": "1.0.0",
-  "publisher": "hackrice-team",
+  "publisher": "JustinLai",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -47,56 +47,56 @@
   "contributes": {
     "commands": [
       {
-        "command": "codescribe.analyzeSelection",
-        "title": "CodeScribe: Analyze Selection"
+        "command": "codearch.analyzeSelection",
+        "title": "CodeArch: Analyze Selection"
       },
       {
-        "command": "codescribe.configureApiKey",
-        "title": "CodeScribe: Configure API Key"
+        "command": "codearch.configureApiKey",
+        "title": "CodeArch: Configure API Key"
       },
       {
-        "command": "codescribe.selectModel",
-        "title": "CodeScribe: Select Model"
+        "command": "codearch.selectModel",
+        "title": "CodeArch: Select Model"
       },
       {
-        "command": "codescribe.showChat",
-        "title": "CodeScribe: Show Chat"
+        "command": "codearch.showChat",
+        "title": "CodeArch: Show Chat"
       },
       {
-        "command": "codescribe.hideChat",
-        "title": "CodeScribe: Hide Chat"
+        "command": "codearch.hideChat",
+        "title": "CodeArch: Hide Chat"
       },
       {
-        "command": "codescribe.addToChat",
-        "title": "CodeScribe: Add to Chat"
+        "command": "codearch.addToChat",
+        "title": "CodeArch: Add to Chat"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "command": "codescribe.analyzeSelection",
+          "command": "codearch.analyzeSelection",
           "when": "editorHasSelection",
           "group": "1_modification"
         },
         {
-          "command": "codescribe.addToChat",
+          "command": "codearch.addToChat",
           "when": "editorHasSelection",
           "group": "1_modification"
         }
       ]
     },
     "views": {
-      "codescribe": [
+      "codearch": [
         {
           "type": "webview",
-          "id": "codescribe.resultsView",
+          "id": "codearch.resultsView",
           "name": "Results",
           "when": "true",
           "size": 1
         },
         {
           "type": "webview",
-          "id": "codescribe.chatView",
+          "id": "codearch.chatView",
           "name": "Chat",
           "when": "true",
           "size": 1
@@ -106,16 +106,16 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "codescribe",
-          "title": "CodeScribe",
+          "id": "codearch",
+          "title": "CodeArch",
           "icon": "$(telescope)"
         }
       ]
     },
     "configuration": {
-      "title": "CodeScribe",
+      "title": "CodeArch",
       "properties": {
-        "codescribe.aiProvider": {
+        "codearch.aiProvider": {
           "type": "string",
           "enum": [
             "gemini",
@@ -126,10 +126,10 @@
           "default": "gemini",
           "description": "Choose your preferred AI provider for code analysis."
         },
-        "codescribe.enableRenameDetection": {
+        "codearch.enableRenameDetection": {
           "type": "boolean",
           "default": true,
-          "description": "Enable automatic detection of function renames in git history. When enabled, CodeScribe will trace a function's history even if it was renamed, providing more complete analysis at the cost of slightly longer processing time."
+          "description": "Enable automatic detection of function renames in git history. When enabled, CodeArch will trace a function's history even if it was renamed, providing more complete analysis at the cost of slightly longer processing time."
         }
       }
     }

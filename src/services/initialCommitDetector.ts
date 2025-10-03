@@ -370,7 +370,7 @@ export class InitialCommitDetector {
      * Check if rename detection is enabled in settings
      */
     private isRenameDetectionEnabled(): boolean {
-        const config = vscode.workspace.getConfiguration('codescribe');
+        const config = vscode.workspace.getConfiguration('codearch');
         return config.get<boolean>('enableRenameDetection', true);
     }
 

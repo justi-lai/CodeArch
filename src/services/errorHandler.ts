@@ -19,12 +19,12 @@ import * as vscode from 'vscode';
 export class ErrorHandler {
     static async handleError(error: Error, context: string): Promise<void> {
         const errorMessage = error.message || 'Unknown error occurred';
-        console.error(`Codex error in ${context}:`, error);
+        console.error(`CodeArch error in ${context}:`, error);
 
         // Check for specific error types and provide helpful guidance
         if (errorMessage.includes('not a git repository')) {
             await vscode.window.showErrorMessage(
-                'CodeScribe: The current file is not in a Git repository. Please open a file that is tracked by Git.',
+                'CodeArch: The current file is not in a Git repository. Please open a file that is tracked by Git.',
                 'Open Git Repository'
             ).then(selection => {
                 if (selection === 'Open Git Repository') {
@@ -36,7 +36,7 @@ export class ErrorHandler {
 
         if (errorMessage.includes('gh: command not found') || errorMessage.includes('GitHub CLI')) {
             await vscode.window.showErrorMessage(
-                'CodeScribe: GitHub CLI (gh) is not installed or not in PATH.',
+                'CodeArch: GitHub CLI (gh) is not installed or not in PATH.',
                 'Installation Guide'
             ).then(selection => {
                 if (selection === 'Installation Guide') {
@@ -48,11 +48,11 @@ export class ErrorHandler {
 
         if (errorMessage.includes('API key') || errorMessage.includes('authentication') || errorMessage.includes('Gemini')) {
             await vscode.window.showErrorMessage(
-                'CodeScribe: Gemini API key issue. Please reconfigure your API key.',
+                'CodeArch: Gemini API key issue. Please reconfigure your API key.',
                 'Configure Gemini API Key'
             ).then(selection => {
                 if (selection === 'Configure Gemini API Key') {
-                    vscode.commands.executeCommand('codescribe.configureApiKey');
+                    vscode.commands.executeCommand('codearch.configureApiKey');
                 }
             });
             return;
@@ -60,11 +60,11 @@ export class ErrorHandler {
 
         if (errorMessage.includes('rate limit')) {
             await vscode.window.showWarningMessage(
-                'CodeScribe: API rate limit exceeded. Please wait a moment before trying again, or switch to a different AI provider.',
+                'codearch: API rate limit exceeded. Please wait a moment before trying again, or switch to a different AI provider.',
                 'Switch AI Provider', 'Retry in 1 minute'
             ).then(selection => {
                 if (selection === 'Switch AI Provider') {
-                    vscode.commands.executeCommand('codescribe.selectModel');
+                    vscode.commands.executeCommand('codearch.selectModel');
                 }
             });
             return;
@@ -72,11 +72,11 @@ export class ErrorHandler {
 
         if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
             await vscode.window.showErrorMessage(
-                'CodeScribe: Network error occurred. Please check your internet connection and try again.',
+                'codearch: Network error occurred. Please check your internet connection and try again.',
                 'Retry'
             ).then(selection => {
                 if (selection === 'Retry') {
-                    vscode.commands.executeCommand('codescribe.analyzeSelection');
+                    vscode.commands.executeCommand('codearch.analyzeSelection');
                 }
             });
             return;
@@ -84,7 +84,7 @@ export class ErrorHandler {
 
         // Generic error handling
         const action = await vscode.window.showErrorMessage(
-            `CodeScribe: ${errorMessage}`,
+            `codearch: ${errorMessage}`,
             'View Details',
             'Report Issue'
         );
@@ -98,7 +98,7 @@ export class ErrorHandler {
 
     private static async showErrorDetails(error: Error, context: string): Promise<void> {
         const details = `
-CodeScribe Error Details
+codearch Error Details
 ========================
 
 Context: ${context}
@@ -121,7 +121,7 @@ Environment:
     }
 
     private static openIssueReport(error: Error, context: string): void {
-        const title = encodeURIComponent(`CodeScribe Error: ${error.message.substring(0, 50)}...`);
+        const title = encodeURIComponent(`codearch Error: ${error.message.substring(0, 50)}...`);
         const body = encodeURIComponent(`
 **Error Context:** ${context}
 
@@ -141,13 +141,13 @@ Environment:
 **Environment:**
 - VS Code Version: ${vscode.version}
 - Platform: ${process.platform}
-- CodeScribe Version: 1.0.0
+- codearch Version: 1.0.0
 
 **Additional Context:**
 [Add any other context about the problem here]
         `);
 
-        const issueUrl = `https://github.com/your-repo/codescribe/issues/new?title=${title}&body=${body}`;
+        const issueUrl = `https://github.com/your-repo/codearch/issues/new?title=${title}&body=${body}`;
         vscode.env.openExternal(vscode.Uri.parse(issueUrl));
     }
 }

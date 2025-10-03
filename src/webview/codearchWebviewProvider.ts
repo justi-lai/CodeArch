@@ -15,13 +15,13 @@
  */
 
 import * as vscode from 'vscode';
-import { CodeScribeResults } from '../types';
+import { CodeArchResults } from '../types';
 
-export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'codescribe.resultsView';
+export class CodeArchWebviewProvider implements vscode.WebviewViewProvider {
+    public static readonly viewType = 'codearch.resultsView';
     private _view?: vscode.WebviewView;
     private _selectedText: string = '';
-    private _currentResults?: CodeScribeResults;
+    private _currentResults?: CodeArchResults;
 
     constructor(private readonly _extensionUri: vscode.Uri) {
     }
@@ -50,7 +50,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.html = this._getInitialHtml();
     }
 
-    public getCurrentResults(): CodeScribeResults | undefined {
+    public getCurrentResults(): CodeArchResults | undefined {
         return this._currentResults;
     }
 
@@ -58,7 +58,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
         return this._selectedText;
     }
 
-    public async showResults(results: CodeScribeResults) {
+    public async showResults(results: CodeArchResults) {
         if (this._view) {
             this._selectedText = results.selectedText;
             this._currentResults = results;
@@ -66,7 +66,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
             this._view.webview.html = this._getResultsHtml(results);
             
             // Set context to show the view
-            await vscode.commands.executeCommand('setContext', 'codescribe.hasResults', true);
+            await vscode.commands.executeCommand('setContext', 'codearch.hasResults', true);
         }
     }
 
@@ -78,7 +78,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>CodeScribe Results</title>
+            <title>codearch Results</title>
             <style>
                 body {
                     font-family: var(--vscode-font-family);
@@ -133,7 +133,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
         </head>
         <body>
             <div class="welcome">
-                <h2>CodeScribe Analysis</h2>
+                <h2>codearch Analysis</h2>
                 <div class="subtitle">Select code in your editor to analyze its history and evolution</div>
                 <div class="capabilities-list">
                     <div class="capability-item">
@@ -158,7 +158,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
         </html>`;
     }
 
-    private _getResultsHtml(results: CodeScribeResults): string {
+    private _getResultsHtml(results: CodeArchResults): string {
         const timelineHtml = this._generateTimelineHtml(results.analysisResult.timeline);
         
         return `<!DOCTYPE html>
@@ -166,7 +166,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>CodeScribe Results</title>
+            <title>codearch Results</title>
             <style>
                 body {
                     font-family: var(--vscode-font-family);

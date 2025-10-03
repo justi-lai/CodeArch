@@ -17,7 +17,7 @@
 import * as vscode from 'vscode';
 import { DependencyValidator } from './services/dependencyValidator';
 import { ApiKeyManager } from './services/apiKeyManager';
-import { CodeScribeWebviewProvider } from './webview/codescribeWebviewProvider';
+import { CodeArchWebviewProvider } from './webview/codearchWebviewProvider';
 import { ChatWebviewProvider } from './webview/chatWebviewProvider';
 import { GitAnalysisEngine } from './services/gitAnalysisEngine';
 import { AiSummaryService } from './services/aiSummaryService';
@@ -30,43 +30,43 @@ export function activate(context: vscode.ExtensionContext) {
     const apiKeyManager = new ApiKeyManager(context);
     const gitAnalysisEngine = new GitAnalysisEngine();
     const aiSummaryService = new AiSummaryService(context);
-    const webviewProvider = new CodeScribeWebviewProvider(context.extensionUri);
+    const webviewProvider = new CodeArchWebviewProvider(context.extensionUri);
     const chatWebviewProvider = new ChatWebviewProvider(context.extensionUri, apiKeyManager, webviewProvider, context);
 
     // Register webview providers
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(
-            'codescribe.resultsView',
+            'codearch.resultsView',
             webviewProvider
         )
     );
     
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(
-            'codescribe.chatView',
+            'codearch.chatView',
             chatWebviewProvider
         )
     );
 
     // Register commands
     const showChatCommand = vscode.commands.registerCommand(
-        'codescribe.showChat',
+        'codearch.showChat',
         async () => {
             // Focus on the chat view to expand it
-            await vscode.commands.executeCommand('codescribe.chatView.focus');
+            await vscode.commands.executeCommand('codearch.chatView.focus');
         }
     );
 
     const hideChatCommand = vscode.commands.registerCommand(
-        'codescribe.hideChat',
+        'codearch.hideChat',
         async () => {
             // Focus on results view to collapse chat
-            await vscode.commands.executeCommand('codescribe.resultsView.focus');
+            await vscode.commands.executeCommand('codearch.resultsView.focus');
         }
     );
 
     const addToChatCommand = vscode.commands.registerCommand(
-        'codescribe.addToChat',
+        'codearch.addToChat',
         async () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) {
@@ -99,12 +99,12 @@ export function activate(context: vscode.ExtensionContext) {
             });
 
             // Show chat panel
-            await vscode.commands.executeCommand('codescribe.chatView.focus');
+            await vscode.commands.executeCommand('codearch.chatView.focus');
         }
     );
 
     const analyzeSelectionCommand = vscode.commands.registerCommand(
-        'codescribe.analyzeSelection',
+        'codearch.analyzeSelection',
         async () => {
             try {
                 // Validate dependencies first
@@ -117,11 +117,11 @@ export function activate(context: vscode.ExtensionContext) {
                 const hasApiKey = await apiKeyManager.hasApiKey();
                 if (!hasApiKey) {
                     const configure = await vscode.window.showInformationMessage(
-                        'CodeScribe requires a Gemini API key to generate summaries.',
+                        'codearch requires a Gemini API key to generate summaries.',
                         'Configure Gemini API Key'
                     );
                     if (configure) {
-                        await vscode.commands.executeCommand('codescribe.configureApiKey');
+                        await vscode.commands.executeCommand('codearch.configureApiKey');
                         // Check again if user actually configured it
                         const hasApiKeyAfterConfig = await apiKeyManager.hasApiKey();
                         if (!hasApiKeyAfterConfig) {
@@ -147,7 +147,7 @@ export function activate(context: vscode.ExtensionContext) {
 
                 // Show progress
                 await UserFeedback.showProgress(
-                    'CodeScribe: Analyzing code history...',
+                    'codearch: Analyzing code history...',
                     async (progress, token) => {
                     try {
                         const document = editor.document;
@@ -188,7 +188,7 @@ export function activate(context: vscode.ExtensionContext) {
                         progress.report({ increment: 40, message: 'Displaying results...' });
 
                         // Ensure the webview is revealed first
-                        await vscode.commands.executeCommand('codescribe.resultsView.focus');
+                        await vscode.commands.executeCommand('codearch.resultsView.focus');
                         
                         // Small delay to ensure webview is ready
                         await new Promise(resolve => setTimeout(resolve, 100));
@@ -222,21 +222,21 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     const configureApiKeyCommand = vscode.commands.registerCommand(
-        'codescribe.configureApiKey',
+        'codearch.configureApiKey',
         async () => {
             await apiKeyManager.configureApiKey();
         }
     );
 
     const selectModelCommand = vscode.commands.registerCommand(
-        'codescribe.selectModel',
+        'codearch.selectModel',
         async () => {
             await selectModel();
         }
     );
 
     const reanalyzeWithModeCommand = vscode.commands.registerCommand(
-        'codescribe.reanalyzeWithMode',
+        'codearch.reanalyzeWithMode',
         async (args: { results: any }) => {
             try {
                 const { results } = args;
@@ -285,11 +285,11 @@ export function activate(context: vscode.ExtensionContext) {
     dependencyValidator.validateDependencies();
 
     async function selectModel() {
-        const config = vscode.workspace.getConfiguration('codescribe');
+        const config = vscode.workspace.getConfiguration('codearch');
         const currentProvider = config.get<string>('aiProvider', 'gemini');
         
         const modelOptions = getModelsForProvider(currentProvider);
-        const currentModel = (await context.globalState.get(`codescribe.model.${currentProvider}`) as string) || modelOptions[0].value;
+        const currentModel = (await context.globalState.get(`codearch.model.${currentProvider}`) as string) || modelOptions[0].value;
         
         // For Hugging Face, if we have a custom model that's not 'custom', add it to the options
         if (currentProvider === 'huggingface' && currentModel && currentModel !== 'custom' && !modelOptions.find(opt => opt.value === currentModel)) {
@@ -338,9 +338,9 @@ export function activate(context: vscode.ExtensionContext) {
                 modelValue = customModel;
             }
             
-            await context.globalState.update(`codescribe.model.${currentProvider}`, modelValue);
+            await context.globalState.update(`codearch.model.${currentProvider}`, modelValue);
             vscode.window.showInformationMessage(
-                `CodeScribe: Selected ${selection.label} for ${currentProvider.toUpperCase()}`
+                `codearch: Selected ${selection.label} for ${currentProvider.toUpperCase()}`
             );
         }
     }

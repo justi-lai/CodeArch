@@ -17,27 +17,27 @@
 import * as vscode from 'vscode';
 
 export class ApiKeyManager {
-    private static readonly GEMINI_API_KEY_SECRET = 'codescribe.geminiApiKey';
-    private static readonly OPENAI_API_KEY_SECRET = 'codescribe.openaiApiKey';
-    private static readonly CLAUDE_API_KEY_SECRET = 'codescribe.claudeApiKey';
-    private static readonly HUGGINGFACE_API_KEY_SECRET = 'codescribe.huggingfaceApiKey';
+    private static readonly GEMINI_API_KEY_SECRET = 'codearch.geminiApiKey';
+    private static readonly OPENAI_API_KEY_SECRET = 'codearch.openaiApiKey';
+    private static readonly CLAUDE_API_KEY_SECRET = 'codearch.claudeApiKey';
+    private static readonly HUGGINGFACE_API_KEY_SECRET = 'codearch.huggingfaceApiKey';
 
     constructor(private context: vscode.ExtensionContext) {}
 
     async hasApiKey(): Promise<boolean> {
-        const config = vscode.workspace.getConfiguration('codescribe');
+        const config = vscode.workspace.getConfiguration('codearch');
         const provider = config.get<string>('aiProvider', 'gemini');
         const apiKey = await this.getProviderApiKey(provider);
         return !!apiKey;
     }
 
     async getApiKey(): Promise<string> {
-        const config = vscode.workspace.getConfiguration('codescribe');
+        const config = vscode.workspace.getConfiguration('codearch');
         const provider = config.get<string>('aiProvider', 'gemini');
         const apiKey = await this.getProviderApiKey(provider);
         
         if (!apiKey) {
-            throw new Error(`No ${provider} API key configured. Please run "CodeScribe: Configure API Key" command.`);
+            throw new Error(`No ${provider} API key configured. Please run "codearch: Configure API Key" command.`);
         }
         return apiKey;
     }
@@ -58,7 +58,7 @@ export class ApiKeyManager {
     }
 
     async configureApiKey(): Promise<void> {
-        const config = vscode.workspace.getConfiguration('codescribe');
+        const config = vscode.workspace.getConfiguration('codearch');
 
         // Let user choose AI provider
         const provider = await vscode.window.showQuickPick([
@@ -191,7 +191,7 @@ export class ApiKeyManager {
     }
 
     async clearApiKey(): Promise<void> {
-        const config = vscode.workspace.getConfiguration('codescribe');
+        const config = vscode.workspace.getConfiguration('codearch');
         const provider = config.get<string>('aiProvider', 'gemini');
         
         switch (provider) {
@@ -213,7 +213,7 @@ export class ApiKeyManager {
     }
 
     getModelName(): string {
-        const config = vscode.workspace.getConfiguration('codescribe');
+        const config = vscode.workspace.getConfiguration('codearch');
         const provider = config.get<string>('aiProvider', 'gemini');
         
         switch (provider) {

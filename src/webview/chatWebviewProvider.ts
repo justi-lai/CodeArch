@@ -17,7 +17,7 @@
 import * as vscode from 'vscode';
 import { ChatService } from '../services/chatService';
 import { ApiKeyManager } from '../services/apiKeyManager';
-import { CodeScribeWebviewProvider } from './codescribeWebviewProvider';
+import { CodeArchWebviewProvider } from './codearchWebviewProvider';
 import { GitAnalysisEngine } from '../services/gitAnalysisEngine';
 
 export interface ChatContext {
@@ -41,7 +41,7 @@ export interface ChatMessage {
 }
 
 export class ChatWebviewProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'codescribe.chatView';
+    public static readonly viewType = 'codearch.chatView';
     private _view?: vscode.WebviewView;
     private _chatService: ChatService;
     private _context: ChatContext[] = [];
@@ -53,7 +53,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private readonly _apiKeyManager: ApiKeyManager,
-        private readonly _codeScribeProvider?: CodeScribeWebviewProvider,
+        private readonly _codearchProvider?: CodeArchWebviewProvider,
         private readonly _extensionContext?: vscode.ExtensionContext
     ) {
         this._chatService = new ChatService(this._extensionContext);
@@ -339,11 +339,11 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
 
     private async _addGitDiff() {
         try {
-            // Get current git analysis results from the CodeScribe provider
-            const currentResults = this._codeScribeProvider?.getCurrentResults();
+            // Get current git analysis results from the codearch provider
+            const currentResults = this._codearchProvider?.getCurrentResults();
             
             if (!currentResults) {
-                vscode.window.showErrorMessage('No analysis results available. Please run CodeScribe analysis first to see commit diffs.');
+                vscode.window.showErrorMessage('No analysis results available. Please run codearch analysis first to see commit diffs.');
                 return;
             }
 
@@ -403,25 +403,25 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
 
 
     private async _addCurrentAnalysis() {
-        // Get the latest analysis from the main CodeScribe provider
-        const currentResults = this._codeScribeProvider?.getCurrentResults();
+        // Get the latest analysis from the main codearch provider
+        const currentResults = this._codearchProvider?.getCurrentResults();
         
         if (!currentResults) {
             const runAnalysis = await vscode.window.showInformationMessage(
-                'No recent analysis found. Would you like to run CodeScribe analysis first?',
+                'No recent analysis found. Would you like to run codearch analysis first?',
                 'Run Analysis',
                 'Cancel'
             );
             
             if (runAnalysis === 'Run Analysis') {
-                await vscode.commands.executeCommand('codescribe.analyzeGitChanges');
+                await vscode.commands.executeCommand('codearch.analyzeGitChanges');
                 vscode.window.showInformationMessage('Please run the analysis and try adding context again.');
             }
             return;
         }
 
         // Only add the analysis summary (code is auto-added on send)
-        await this.addAnalysisContext(currentResults.summary, 'CodeScribe Analysis');
+        await this.addAnalysisContext(currentResults.summary, 'codearch Analysis');
         
         vscode.window.showInformationMessage(
             `Added analysis context: ${currentResults.summary.length} chars of analysis`
@@ -448,7 +448,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
     public async ensureVisible() {
         // Ensure the chat view is visible and expanded
         if (this._view) {
-            await vscode.commands.executeCommand('codescribe.chatView.focus');
+            await vscode.commands.executeCommand('codearch.chatView.focus');
         }
     }
 
@@ -527,7 +527,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>CodeScribe Chat</title>
+            <title>codearch Chat</title>
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@vscode/codicons@0.0.35/dist/codicon.css">
             <style>
                 ${this._getCSSStyles()}
@@ -645,7 +645,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                 <div class="capabilities-list">
                     <div class="capability-item">
                         <span class="codicon codicon-file-code"></span>
-                        <span>Add context from CodeScribe analysis automatically</span>
+                        <span>Add context from codearch analysis automatically</span>
                     </div>
                     <div class="capability-item">
                         <span class="codicon codicon-add"></span>
