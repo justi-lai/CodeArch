@@ -14,7 +14,7 @@ export function activate(context: vscode.ExtensionContext) {
     const dependencyValidator = new DependencyValidator();
     const apiKeyManager = new ApiKeyManager(context);
     const gitAnalysisEngine = new GitAnalysisEngine();
-    const aiSummaryService = new AiSummaryService();
+    const aiSummaryService = new AiSummaryService(context);
     const webviewProvider = new CodeScribeWebviewProvider(context.extensionUri);
     const chatWebviewProvider = new ChatWebviewProvider(context.extensionUri, apiKeyManager, webviewProvider);
 
@@ -213,6 +213,13 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    const selectModelCommand = vscode.commands.registerCommand(
+        'codescribe.selectModel',
+        async () => {
+            await selectModel();
+        }
+    );
+
     const reanalyzeWithModeCommand = vscode.commands.registerCommand(
         'codescribe.reanalyzeWithMode',
         async (args: { results: any }) => {
@@ -256,10 +263,92 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(addToChatCommand);
     context.subscriptions.push(analyzeSelectionCommand);
     context.subscriptions.push(configureApiKeyCommand);
+    context.subscriptions.push(selectModelCommand);
     context.subscriptions.push(reanalyzeWithModeCommand);
 
     // Check dependencies on startup
     dependencyValidator.validateDependencies();
+
+    async function selectModel() {
+        const config = vscode.workspace.getConfiguration('codescribe');
+        const currentProvider = config.get<string>('aiProvider', 'gemini');
+        
+        const modelOptions = getModelsForProvider(currentProvider);
+        const currentModel = await context.globalState.get(`codescribe.model.${currentProvider}`) || modelOptions[0].value;
+        
+        const selection = await vscode.window.showQuickPick(
+            modelOptions.map(option => ({
+                ...option,
+                picked: option.value === currentModel
+            })),
+            {
+                placeHolder: `Select ${currentProvider.toUpperCase()} model`,
+                matchOnDescription: true,
+                matchOnDetail: true
+            }
+        );
+
+        if (selection) {
+            let modelValue = selection.value;
+            
+            // Handle Hugging Face custom model input
+            if (currentProvider === 'huggingface' && selection.value === 'custom') {
+                const customModel = await vscode.window.showInputBox({
+                    prompt: 'Enter Hugging Face model ID (e.g., microsoft/DialoGPT-large)',
+                    placeHolder: 'microsoft/DialoGPT-large',
+                    validateInput: (value) => {
+                        if (!value || value.trim() === '') {
+                            return 'Model ID is required';
+                        }
+                        if (!value.includes('/')) {
+                            return 'Model ID should be in format: publisher/model-name';
+                        }
+                        return undefined;
+                    }
+                });
+                
+                if (!customModel) {
+                    return; // User cancelled
+                }
+                modelValue = customModel;
+            }
+            
+            await context.globalState.update(`codescribe.model.${currentProvider}`, modelValue);
+            vscode.window.showInformationMessage(
+                `CodeScribe: Selected ${selection.label} for ${currentProvider.toUpperCase()}`
+            );
+        }
+    }
+
+    function getModelsForProvider(provider: string): Array<{label: string, description: string, value: string}> {
+        switch (provider) {
+            case 'gemini':
+                return [
+                    { label: 'Gemini 2.0 Flash', description: 'Fast and efficient - best for speed', value: 'gemini-2.0-flash-exp' },
+                    { label: 'Gemini 2.5 Flash', description: 'Advanced flash model', value: 'gemini-2.5-flash' },
+                    { label: 'Gemini 2.5 Pro', description: 'Most capable Gemini model', value: 'gemini-2.5-pro' }
+                ];
+            case 'openai':
+                return [
+                    { label: 'GPT-4o Mini', description: 'Fast, cost-effective, perfect for code analysis', value: 'gpt-4o-mini' },
+                    { label: 'GPT-4o', description: 'More capable but slower than mini', value: 'gpt-4o' },
+                    { label: 'GPT-5 Mini', description: 'Latest tech but slower (may not be available)', value: 'gpt-5-mini' },
+                    { label: 'GPT-5', description: 'Maximum capabilities but slowest (may not be available)', value: 'gpt-5' }
+                ];
+            case 'claude':
+                return [
+                    { label: 'Claude Sonnet 4', description: 'Best balance of performance and cost', value: 'claude-sonnet-4-20250514' },
+                    { label: 'Claude Sonnet 4.5', description: 'Latest and most capable Sonnet model', value: 'claude-sonnet-4-5-20250929' },
+                    { label: 'Claude Sonnet 3.7', description: 'Previous generation Sonnet model', value: 'claude-3-7-sonnet-20250219' }
+                ];
+            case 'huggingface':
+                return [
+                    { label: 'Enter Custom Model ID', description: 'You will be prompted to enter the model ID', value: 'custom' }
+                ];
+            default:
+                return [];
+        }
+    }
 }
 
 export function deactivate() {}

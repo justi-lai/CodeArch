@@ -64,53 +64,27 @@ export class EnhancedContextBuilder {
             // Calculate criticality based on LSP data
             const criticality = this.lspService.calculateCriticality(lspContext);
 
-            // Debug: Log AST structure
-            console.log(`[DEBUG] AST Analysis Results:`);
-            console.log(`[DEBUG] - Language: ${astStructure.language}`);
-            console.log(`[DEBUG] - Functions found: ${astStructure.functions.length}`);
-            if (astStructure.functions.length > 0) {
-                console.log(`[DEBUG] - Function names: [${astStructure.functions.map(f => f.name).join(', ')}]`);
-                astStructure.functions.forEach((func, i) => {
-                    const funcStart = func.startPosition.row + 1;
-                    const funcEnd = func.endPosition.row + 1;
-                    console.log(`[DEBUG]   ${i + 1}. ${func.name}: lines ${funcStart}-${funcEnd}`);
-                });
-            }
-            console.log(`[DEBUG] - Classes found: ${astStructure.classes.length}`);
-            console.log(`[DEBUG] - Variables found: ${astStructure.variables.length}`);
+
 
             // Find the containing function and its initial commit
             let containingFunctionName = this.findContainingFunctionName(astStructure, startLine, endLine);
             
             // Fallback: If AST didn't find a function but LSP found a symbol, use that
             if (!containingFunctionName && lspContext.symbolAtPosition) {
-                console.log(`[DEBUG] AST analysis failed to find function, using LSP symbol: ${lspContext.symbolAtPosition}`);
                 containingFunctionName = lspContext.symbolAtPosition;
             }
             
             let initialCommit: InitialCommitInfo | undefined;
             
             if (containingFunctionName) {
-                console.log(`[DEBUG] Found containing function: ${containingFunctionName}`);
                 const workspaceRoot = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath;
                 if (workspaceRoot) {
-                    console.log(`[DEBUG] Searching for initial commit in workspace: ${workspaceRoot}`);
                     initialCommit = await this.initialCommitDetector.findInitialCommit(
                         containingFunctionName, 
                         filePath, 
                         workspaceRoot
                     ) || undefined;
-                    
-                    if (initialCommit) {
-                        console.log(`[DEBUG] Found initial commit: ${initialCommit.hash} - ${initialCommit.message}`);
-                    } else {
-                        console.log(`[DEBUG] No initial commit found for function: ${containingFunctionName}`);
-                    }
-                } else {
-                    console.log(`[DEBUG] No workspace root found for file: ${filePath}`);
                 }
-            } else {
-                console.log(`[DEBUG] No containing function found for selected code`);
             }
 
             // Get surrounding code context
@@ -222,8 +196,8 @@ Usage Context: ${this.formatCriticalityContext(context)}
 Respond with ONLY valid JSON in this exact format:
 {
   "criticalityLevel": "HIGH|MEDIUM|LOW",
-  "riskAssessment": "Risk level and safety for modification",
-  "reasoning": "Why this criticality level was assigned"
+  "riskAssessment": "1-2 sentences on modification risk",
+  "reasoning": "Brief reason for this criticality level"
 }
 
 Use plain text values, no markdown formatting.`;
@@ -238,7 +212,7 @@ ${this.formatInitialCommitContext(context.initialCommit)}
 
 Respond with ONLY valid JSON in this exact format:
 {
-  "introduction": "Based on the initial commit above, explain why this function was created and what problem it solved"
+  "introduction": "2-3 sentences max: Why this function was created and what problem it solved"
 }
 
 CRITICAL: Use ONLY the INITIAL COMMIT information above. Base your analysis on the commit message and context provided.
@@ -253,7 +227,7 @@ ${this.formatCodeContext(context)}
 
 Respond with ONLY valid JSON in this exact format:
 {
-  "introduction": "Based on the code structure, variable names, and functionality, explain what problem this function was designed to solve"
+  "introduction": "2-3 sentences max: What problem this function was designed to solve"
 }
 
 CRITICAL: Since no git history is available, analyze the code itself to infer the original design intent. Focus on the problem it solves.
@@ -269,7 +243,7 @@ ${this.formatRecentChangesContext(context.gitAnalysis, context.initialCommit)}
 
 Respond with ONLY valid JSON in this exact format:
 {
-  "evolution": "How this code has evolved since its initial creation, based on recent commits"
+  "evolution": "2-3 sentences max: Key changes since initial creation"
 }
 
 Use plain text values, no markdown formatting.`;
@@ -521,7 +495,6 @@ Use plain text values, no markdown formatting.`;
             const funcEndLine = func.endPosition.row + 1;
             
             if (funcStartLine <= startLine && funcEndLine >= endLine) {
-                console.log(`[DEBUG] Found containing function from AST: ${func.name} (lines ${funcStartLine}-${funcEndLine})`);
                 return func.name;
             }
         }
@@ -547,12 +520,9 @@ Use plain text values, no markdown formatting.`;
         }
 
         if (closestFunction && closestDistance <= 5) { // Within 5 lines is considered "close enough"
-            const funcStartLine = closestFunction.startPosition.row + 1;
-            console.log(`[DEBUG] Found closest function from AST: ${closestFunction.name} (distance: ${closestDistance} lines)`);
             return closestFunction.name;
         }
 
-        console.log(`[DEBUG] No containing function found for lines ${startLine}-${endLine}`);
         return undefined;
     }
 }

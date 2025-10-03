@@ -37,6 +37,10 @@
         "title": "CodeScribe: Configure API Key"
       },
       {
+        "command": "codescribe.selectModel",
+        "title": "CodeScribe: Select Model"
+      },
+      {
         "command": "codescribe.showChat",
         "title": "CodeScribe: Show Chat"
       },
@@ -92,15 +96,16 @@
     "configuration": {
       "title": "CodeScribe",
       "properties": {
-        "codescribe.geminiModel": {
+        "codescribe.aiProvider": {
           "type": "string",
           "enum": [
-            "gemini-2.5-pro",
-            "gemini-2.5-flash",
-            "gemini-2.0-flash-exp"
+            "gemini",
+            "openai",
+            "claude",
+            "huggingface"
           ],
-          "default": "gemini-2.0-flash-exp",
-          "description": "Gemini model to use for generating summaries. Choose from the latest Gemini 2.0 and 2.5 models for optimal performance and capabilities."
+          "default": "gemini",
+          "description": "Choose your preferred AI provider for code analysis."
         },
         "codescribe.enableRenameDetection": {
           "type": "boolean",

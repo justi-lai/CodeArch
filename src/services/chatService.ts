@@ -15,51 +15,22 @@ export class ChatService {
         apiKey?: string
     ): Promise<string> {
         const config = vscode.workspace.getConfiguration('codescribe');
-        const model = config.get<string>('geminiModel', 'gemini-2.0-flash-exp');
+        const provider = config.get<string>('aiProvider', 'gemini');
 
         if (!apiKey || apiKey.trim() === '') {
-            throw new Error('Gemini API key not configured. Please run "CodeScribe: Configure API Key" command first.');
+            throw new Error(`${provider} API key not configured. Please run "CodeScribe: Configure API Key" command first.`);
         }
 
         const prompt = this._buildPrompt(message, mode, context, previousMessages);
 
         try {
-            const response = await axios.post(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-                {
-                    contents: [{
-                        parts: [{
-                            text: prompt
-                        }]
-                    }],
-                    generationConfig: {
-                        maxOutputTokens: this.maxTokens,
-                        temperature: this.temperature,
-                        topP: 0.8,
-                        topK: 40
-                    }
-                },
-                {
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    timeout: 30000
-                }
-            );
-
-            const generatedText = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
-            
-            if (!generatedText) {
-                throw new Error('No response generated from AI service');
-            }
-
-            return generatedText;
+            return await this.executeProviderQuery(provider, prompt, apiKey);
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 if (error.response?.status === 400) {
                     throw new Error('Invalid request to AI service. Please check your input.');
                 } else if (error.response?.status === 401) {
-                    throw new Error('Invalid API key. Please check your Gemini API key in settings.');
+                    throw new Error(`Invalid API key. Please check your ${provider} API key in settings.`);
                 } else if (error.response?.status === 429) {
                     throw new Error('Rate limit exceeded. Please try again in a moment.');
                 } else {
@@ -68,6 +39,164 @@ export class ChatService {
             }
             throw error;
         }
+    }
+
+    private async executeProviderQuery(provider: string, prompt: string, apiKey: string): Promise<string> {
+        const config = vscode.workspace.getConfiguration('codescribe');
+        
+        switch (provider) {
+            case 'gemini':
+                return this.executeGeminiQuery(prompt, config.get<string>('geminiModel', 'gemini-1.5-pro'), apiKey);
+            case 'openai':
+                return this.executeOpenAIQuery(prompt, config.get<string>('openaiModel', 'gpt-4o-mini'), apiKey);
+            case 'claude':
+                return this.executeClaudeQuery(prompt, config.get<string>('claudeModel', 'claude-3-5-sonnet-20241022'), apiKey);
+            case 'huggingface':
+                const model = config.get<string>('huggingfaceModel');
+                if (!model || model.trim() === '') {
+                    throw new Error('Hugging Face model ID is required. Please configure a model in settings (e.g., "microsoft/DialoGPT-large").');
+                }
+                return this.executeHuggingFaceQuery(prompt, model, apiKey);
+            default:
+                throw new Error(`Unsupported provider: ${provider}`);
+        }
+    }
+
+    private async executeGeminiQuery(prompt: string, model: string, apiKey: string): Promise<string> {
+        const response = await axios.post(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+            {
+                contents: [{
+                    parts: [{
+                        text: prompt
+                    }]
+                }],
+                generationConfig: {
+                    maxOutputTokens: this.maxTokens,
+                    temperature: this.temperature,
+                    topP: 0.8,
+                    topK: 40
+                }
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000
+            }
+        );
+
+        const generatedText = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (!generatedText) {
+            throw new Error('No response generated from Gemini');
+        }
+
+        return generatedText;
+    }
+
+    private async executeOpenAIQuery(prompt: string, model: string, apiKey: string): Promise<string> {
+        const requestBody = {
+            model: model,
+            messages: [{ role: 'user', content: prompt }],
+            ...(this.isGPT5Model(model) 
+                ? { 
+                    max_completion_tokens: this.maxTokens
+                    // GPT-5 models only support default temperature of 1
+                }
+                : { 
+                    temperature: this.temperature,
+                    max_tokens: this.maxTokens 
+                }
+            )
+        };
+
+        const response = await axios.post(
+            'https://api.openai.com/v1/chat/completions',
+            requestBody,
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                timeout: 30000
+            }
+        );
+
+        const generatedText = response.data.choices?.[0]?.message?.content;
+        
+        if (!generatedText) {
+            throw new Error('No response generated from OpenAI');
+        }
+
+        return generatedText;
+    }
+
+    private async executeClaudeQuery(prompt: string, model: string, apiKey: string): Promise<string> {
+        const response = await axios.post(
+            'https://api.anthropic.com/v1/messages',
+            {
+                model: model,
+                max_tokens: this.maxTokens,
+                messages: [{ role: 'user', content: prompt }],
+                temperature: this.temperature
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01'
+                },
+                timeout: 30000
+            }
+        );
+
+        const generatedText = response.data.content?.[0]?.text;
+        
+        if (!generatedText) {
+            throw new Error('No response generated from Claude');
+        }
+
+        return generatedText;
+    }
+
+    private async executeHuggingFaceQuery(prompt: string, model: string, apiKey: string): Promise<string> {
+        const response = await axios.post(
+            `https://api-inference.huggingface.co/models/${model}`,
+            {
+                inputs: prompt,
+                parameters: {
+                    temperature: this.temperature,
+                    max_new_tokens: 1000,
+                    return_full_text: false
+                }
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                timeout: 30000
+            }
+        );
+
+        let generatedText = '';
+        
+        if (Array.isArray(response.data) && response.data.length > 0) {
+            generatedText = response.data[0].generated_text || response.data[0].text || '';
+        } else if (response.data.generated_text) {
+            generatedText = response.data.generated_text;
+        }
+        
+        if (!generatedText) {
+            throw new Error('No response generated from Hugging Face');
+        }
+
+        return generatedText;
+    }
+
+    private isGPT5Model(model: string): boolean {
+        return model.startsWith('gpt-5');
     }
 
     private _buildPrompt(

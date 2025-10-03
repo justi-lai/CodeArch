@@ -5,9 +5,96 @@ import { EnhancedContextBuilder, EnhancedCodeContext } from './enhancedContextBu
 
 export class AiSummaryService {
     private contextBuilder: EnhancedContextBuilder;
+    private context?: vscode.ExtensionContext;
 
-    constructor() {
+    constructor(context?: vscode.ExtensionContext) {
         this.contextBuilder = new EnhancedContextBuilder();
+        this.context = context;
+    }
+
+    private async getProviderConfig(provider: string): Promise<any> {
+        // Get stored model preference from global state, or use defaults
+        const storedModel = await this.getStoredModel(provider);
+        
+        switch (provider) {
+            case 'gemini':
+                return {
+                    model: storedModel || 'gemini-2.0-flash-exp'
+                };
+            case 'openai':
+                return {
+                    model: storedModel || 'gpt-4o-mini'
+                };
+            case 'claude':
+                return {
+                    model: storedModel || 'claude-sonnet-4-20250514'
+                };
+            case 'huggingface':
+                let model = storedModel;
+                if (!model || model.trim() === '' || model === 'custom') {
+                    // Prompt user to enter custom model ID
+                    const customModel = await vscode.window.showInputBox({
+                        prompt: 'Enter Hugging Face model ID (e.g., microsoft/DialoGPT-large)',
+                        placeHolder: 'microsoft/DialoGPT-large'
+                    });
+                    if (!customModel || customModel.trim() === '') {
+                        throw new Error('Hugging Face model ID is required. Please use "CodeScribe: Select Model" command to configure.');
+                    }
+                    model = customModel;
+                }
+                return {
+                    model: model
+                };
+            default:
+                throw new Error(`Unsupported AI provider: ${provider}`);
+        }
+    }
+
+    private async getStoredModel(provider: string): Promise<string | undefined> {
+        if (this.context) {
+            return this.context.globalState.get(`codescribe.model.${provider}`);
+        }
+        return undefined;
+    }
+
+    private validateProviderConfig(provider: string, providerConfig: any): void {
+        if (!provider) {
+            throw new Error('AI provider not specified');
+        }
+        
+        if (!providerConfig || !providerConfig.model) {
+            throw new Error(`Invalid configuration for provider: ${provider}`);
+        }
+        
+        // Provider-specific validation
+        switch (provider) {
+            case 'gemini':
+                this.validateModel(providerConfig.model);
+                break;
+            case 'openai':
+                this.validateOpenAIModel(providerConfig.model);
+                break;
+            case 'claude':
+                this.validateClaudeModel(providerConfig.model);
+                break;
+            case 'huggingface':
+                // HuggingFace models are validated at runtime
+                break;
+        }
+    }
+
+    private validateOpenAIModel(model: string): void {
+        const validModels = ['gpt-5', 'gpt-5-mini', 'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
+        if (!validModels.includes(model)) {
+            throw new Error(`Invalid OpenAI model: ${model}. Supported models: ${validModels.join(', ')}`);
+        }
+    }
+
+    private validateClaudeModel(model: string): void {
+        const validModels = ['claude-sonnet-4-5-20250929', 'claude-sonnet-4-20250514', 'claude-3-7-sonnet-20250219'];
+        if (!validModels.includes(model)) {
+            throw new Error(`Invalid Claude model: ${model}. Supported models: ${validModels.join(', ')}`);
+        }
     }
 
     async generateEnhancedSummary(
@@ -19,10 +106,11 @@ export class AiSummaryService {
         endLine: number
     ): Promise<string> {
         const config = vscode.workspace.getConfiguration('codescribe');
-        const model = config.get<string>('geminiModel', 'gemini-2.0-flash-exp');
+        const provider = config.get<string>('aiProvider', 'gemini');
+        const providerConfig = await this.getProviderConfig(provider);
         
-        // Validate model availability
-        this.validateModel(model);
+        // Validate provider and model availability
+        this.validateProviderConfig(provider, providerConfig);
 
         try {
             // Build enhanced context with AST and LSP analysis
@@ -39,10 +127,10 @@ export class AiSummaryService {
             
             // Execute all queries in parallel for efficiency
             const [purposeResponse, criticalityResponse, introductionResponse, evolutionResponse] = await Promise.all([
-                this.executeQuery(queries.purposeQuery, model, apiKey),
-                this.executeQuery(queries.criticalityQuery, model, apiKey),
-                this.executeQuery(queries.introductionQuery, model, apiKey),
-                this.executeQuery(queries.evolutionQuery, model, apiKey)
+                this.executeQuery(queries.purposeQuery, provider, providerConfig, apiKey),
+                this.executeQuery(queries.criticalityQuery, provider, providerConfig, apiKey),
+                this.executeQuery(queries.introductionQuery, provider, providerConfig, apiKey),
+                this.executeQuery(queries.evolutionQuery, provider, providerConfig, apiKey)
             ]);
 
             // Combine the responses
@@ -72,14 +160,16 @@ export class AiSummaryService {
         endLine?: number
     ): Promise<string> {
         const config = vscode.workspace.getConfiguration('codescribe');
-        const model = config.get<string>('geminiModel', 'gemini-2.0-flash-exp');
+        const provider = config.get<string>('aiProvider', 'gemini');
+        const providerConfig = await this.getProviderConfig(provider);
         
-        // Validate model availability
-        this.validateModel(model);
+        // Validate provider and model availability
+        this.validateProviderConfig(provider, providerConfig);
         
         const context = await this.buildContextString(analysisResult, selectedCode, filePath, startLine, endLine);
+        const prompt = this.buildPrompt(context);
         
-        return this.generateGeminiSummary(context, apiKey, model);
+        return this.executeQuery(prompt, provider, providerConfig, apiKey);
     }
 
     private getMaxTokensForModel(model: string): number {
@@ -283,7 +373,22 @@ IMPORTANT RULES:
 - Be direct and technical, avoid fluff`;
     }
 
-    private async executeQuery(query: string, model: string, apiKey: string): Promise<string> {
+    private async executeQuery(query: string, provider: string, providerConfig: any, apiKey: string): Promise<string> {
+        switch (provider) {
+            case 'gemini':
+                return this.executeGeminiQuery(query, providerConfig.model, apiKey);
+            case 'openai':
+                return this.executeOpenAIQuery(query, providerConfig.model, apiKey);
+            case 'claude':
+                return this.executeClaudeQuery(query, providerConfig.model, apiKey);
+            case 'huggingface':
+                return this.executeHuggingFaceQuery(query, providerConfig.model, apiKey);
+            default:
+                throw new Error(`Unsupported provider: ${provider}`);
+        }
+    }
+
+    private async executeGeminiQuery(query: string, model: string, apiKey: string): Promise<string> {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         
         const requestBody = {
@@ -322,6 +427,240 @@ IMPORTANT RULES:
         }
 
         return generatedText;
+    }
+
+    private async executeOpenAIQuery(query: string, model: string, apiKey: string): Promise<string> {
+        const url = 'https://api.openai.com/v1/chat/completions';
+        
+        const requestBody = {
+            model: model,
+            messages: [
+                {
+                    role: 'user',
+                    content: query
+                }
+            ],
+            ...(this.isGPT5Model(model) 
+                ? { 
+                    max_completion_tokens: this.getMaxTokensForOpenAI(model)
+                    // GPT-5 models only support default temperature of 1
+                }
+                : { 
+                    temperature: 0.7,
+                    max_tokens: this.getMaxTokensForOpenAI(model) 
+                }
+            )
+        };
+
+        try {
+            const response = await axios.post(url, requestBody, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                timeout: 30000 // 30 second timeout
+            });
+
+            const generatedText = response.data.choices?.[0]?.message?.content;
+            
+            if (!generatedText) {
+                throw new Error(`No response generated from OpenAI API for model ${model}`);
+            }
+
+            return generatedText;
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                // Log the full error response for debugging
+                console.log('OpenAI API Error Details:', {
+                    status: error.response?.status,
+                    data: error.response?.data,
+                    model: model
+                });
+                
+                if (error.response?.status === 400) {
+                    const errorMsg = error.response?.data?.error?.message || 'Invalid request';
+                    if (errorMsg.includes('API key') || errorMsg.includes('authentication')) {
+                        throw new Error(`Invalid OpenAI API key for model ${model}. Please check your configuration.`);
+                    }
+                    if (errorMsg.includes('model')) {
+                        throw new Error(`Model ${model} may not be available or supported. Try switching to a different model in settings. Error: ${errorMsg}`);
+                    }
+                    throw new Error(`OpenAI API error for model ${model}: ${errorMsg}`);
+                } else if (error.response?.status === 401) {
+                    throw new Error(`Invalid OpenAI API key for model ${model}. Please check your configuration.`);
+                } else if (error.response?.status === 404) {
+                    throw new Error(`Model ${model} not found. This model may not be available yet or in your region. Please try a different model.`);
+                } else if (error.response?.status === 429) {
+                    throw new Error(`OpenAI API rate limit exceeded for model ${model}. Please try again later.`);
+                } else if (error.response?.status === 403) {
+                    throw new Error(`OpenAI API access denied for model ${model}. Please check your API key permissions.`);
+                } else {
+                    const fullError = JSON.stringify(error.response?.data, null, 2);
+                    throw new Error(`OpenAI API error for model ${model} (${error.response?.status}): ${error.response?.data?.error?.message || error.message}. Full error: ${fullError}`);
+                }
+            }
+            throw error;
+        }
+    }
+
+    private async executeClaudeQuery(query: string, model: string, apiKey: string): Promise<string> {
+        const url = 'https://api.anthropic.com/v1/messages';
+        
+        const requestBody = {
+            model: model,
+            max_tokens: this.getMaxTokensForClaude(model),
+            messages: [
+                {
+                    role: 'user',
+                    content: query
+                }
+            ],
+            temperature: 0.7
+        };
+
+        try {
+            const response = await axios.post(url, requestBody, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01'
+                }
+            });
+
+            const generatedText = response.data.content?.[0]?.text;
+            
+            if (!generatedText) {
+                throw new Error(`No response generated from Claude API for model ${model}`);
+            }
+
+            return generatedText;
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                if (error.response?.status === 400) {
+                    const errorMsg = error.response?.data?.error?.message || 'Invalid request';
+                    if (errorMsg.includes('API key') || errorMsg.includes('authentication')) {
+                        throw new Error(`Invalid Claude API key for model ${model}. Please check your configuration.`);
+                    }
+                    if (errorMsg.includes('model')) {
+                        throw new Error(`Model ${model} may not be available or supported. Try switching to a different model in settings.`);
+                    }
+                    throw new Error(`Claude API error for model ${model}: ${errorMsg}`);
+                } else if (error.response?.status === 401) {
+                    throw new Error(`Invalid Claude API key for model ${model}. Please check your configuration.`);
+                } else if (error.response?.status === 404) {
+                    throw new Error(`Model ${model} not found. This model may not be available yet or in your region. Please try a different model.`);
+                } else if (error.response?.status === 429) {
+                    throw new Error(`Claude API rate limit exceeded for model ${model}. Please try again later.`);
+                } else if (error.response?.status === 403) {
+                    throw new Error(`Claude API access denied for model ${model}. Please check your API key permissions.`);
+                } else {
+                    throw new Error(`Claude API error for model ${model} (${error.response?.status}): ${error.response?.data?.error?.message || error.message}`);
+                }
+            }
+            throw error;
+        }
+    }
+
+    private async executeHuggingFaceQuery(query: string, model: string, apiKey: string): Promise<string> {
+        const url = `https://api-inference.huggingface.co/models/${model}`;
+        
+        const requestBody = {
+            inputs: query,
+            parameters: {
+                temperature: 0.7,
+                max_new_tokens: 1000,
+                return_full_text: false
+            }
+        };
+
+        try {
+            const response = await axios.post(url, requestBody, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                }
+            });
+
+            let generatedText = '';
+            
+            if (Array.isArray(response.data) && response.data.length > 0) {
+                generatedText = response.data[0].generated_text || response.data[0].text || '';
+            } else if (response.data.generated_text) {
+                generatedText = response.data.generated_text;
+            }
+            
+            if (!generatedText) {
+                throw new Error(`No response generated from Hugging Face API for model ${model}`);
+            }
+
+            return generatedText;
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                if (error.response?.status === 400) {
+                    const errorMsg = error.response?.data?.error || 'Invalid request';
+                    if (errorMsg.includes('token') || errorMsg.includes('authentication')) {
+                        throw new Error(`Invalid Hugging Face API token for model ${model}. Please check your configuration.`);
+                    }
+                    if (errorMsg.includes('model')) {
+                        throw new Error(`Model ${model} may not be available or supported. Try switching to a different model.`);
+                    }
+                    throw new Error(`Hugging Face API error for model ${model}: ${errorMsg}`);
+                } else if (error.response?.status === 401) {
+                    throw new Error(`Invalid Hugging Face API token for model ${model}. Please check your configuration.`);
+                } else if (error.response?.status === 404) {
+                    throw new Error(`Model ${model} not found. This model may not be available or does not exist. Please try a different model.`);
+                } else if (error.response?.status === 429) {
+                    throw new Error(`Hugging Face API rate limit exceeded for model ${model}. Please try again later.`);
+                } else if (error.response?.status === 403) {
+                    throw new Error(`Hugging Face API access denied for model ${model}. Please check your token permissions.`);
+                } else {
+                    throw new Error(`Hugging Face API error for model ${model} (${error.response?.status}): ${error.response?.data?.error || error.message}`);
+                }
+            }
+            throw error;
+        }
+    }
+
+    private isGPT5Model(model: string): boolean {
+        return model.startsWith('gpt-5');
+    }
+
+    private getMaxTokensForOpenAI(model: string): number {
+        switch (model) {
+            case 'gpt-5':
+                return 8192; // GPT-5 likely has high token capacity
+            case 'gpt-5-mini':
+                return 4096; // GPT-5 mini probably similar to GPT-4
+            case 'gpt-4o':
+                return 4096;
+            case 'gpt-4o-mini':
+                return 4096;
+            case 'gpt-4-turbo':
+                return 4096;
+            case 'gpt-3.5-turbo':
+                return 2048;
+            default:
+                return 2048;
+        }
+    }
+
+    private getMaxTokensForClaude(model: string): number {
+        switch (model) {
+            case 'claude-sonnet-4':
+                return 8192; // Claude Sonnet 4 likely has high token capacity
+            case 'claude-3-7-sonnet':
+                return 4096; // Claude 3.7 Sonnet advanced model
+            case 'claude-3-5-sonnet':
+                return 4096; // Claude 3.5 Sonnet
+            case 'claude-3-5-sonnet-20241022':
+                return 4096;
+            case 'claude-3-5-haiku-20241022':
+                return 4096;
+            case 'claude-3-opus-20240229':
+                return 4096;
+            default:
+                return 4096;
+        }
     }
 
     private combineMultipleResponses(

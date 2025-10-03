@@ -41,7 +41,6 @@ export class InitialCommitDetector {
         workspaceRoot: string
     ): Promise<InitialCommitInfo | null> {
         const enableRenameDetection = this.isRenameDetectionEnabled();
-        console.log(`[DEBUG] Rename detection ${enableRenameDetection ? 'enabled' : 'disabled'}`);
         
         return await this.findInitialCommitRecursive(
             functionName, 
@@ -68,22 +67,17 @@ export class InitialCommitDetector {
         maxDepth: number = 5
     ): Promise<InitialCommitInfo | null> {
         try {
-            console.log(`[DEBUG] Finding initial commit (depth ${depth}) for function "${functionName}" in ${filePath}`);
-            console.log(`[DEBUG] Rename history so far: [${previousNames.join(' -> ')}] -> ${functionName}`);
-            
             // Depth limit to prevent infinite recursion
             if (depth >= maxDepth) {
-                console.log(`[DEBUG] Maximum rename depth (${maxDepth}) reached for "${functionName}"`);
                 return null;
             }
             
             // First time only: test that git is working
             if (depth === 0) {
                 try {
-                    const versionOutput = await this.runGitCommand(['--version'], workspaceRoot);
-                    console.log(`[DEBUG] Git version check: "${versionOutput.trim()}"`);
+                    await this.runGitCommand(['--version'], workspaceRoot);
                 } catch (error) {
-                    console.error(`[DEBUG] Git version check failed:`, error);
+                    console.error('Git version check failed:', error);
                     return null;
                 }
             }
@@ -101,18 +95,10 @@ export class InitialCommitDetector {
                 '--date=iso'
             ];
 
-            console.log(`[DEBUG] Running git command: git ${args.join(' ')}`);
-            console.log(`[DEBUG] In directory: ${workspaceRoot}`);
-            console.log(`[DEBUG] Searching for function: "${functionName}"`);
-            console.log(`[DEBUG] In file: ${relativePath}`);
-
             let gitOutput = await this.runGitCommand(args, workspaceRoot);
-            
-            console.log(`[DEBUG] Git -S 'def ${functionName}' output: "${gitOutput}"`);
             
             // Strategy 1b: If searching for 'def functionName' failed, try just the function name
             if (!gitOutput.trim()) {
-                console.log(`[DEBUG] Trying git log -S with just function name`);
                 const fallbackArgs = [
                     'log',
                     '--reverse',
@@ -122,17 +108,14 @@ export class InitialCommitDetector {
                     '--date=iso'
                 ];
                 gitOutput = await this.runGitCommand(fallbackArgs, workspaceRoot);
-                console.log(`[DEBUG] Git -S '${functionName}' output: "${gitOutput}"`);
             }
             
             // Strategy 2: If git log -S failed completely, try git blame (fast and reliable)
             if (!gitOutput.trim()) {
-                console.log(`[DEBUG] git log -S failed, trying git blame strategy (fast)`);
                 gitOutput = await this.tryGitBlame(functionName, relativePath, workspaceRoot);
             }
             
             if (!gitOutput.trim()) {
-                console.log(`[DEBUG] All git strategies failed for function "${functionName}"`);
                 return null;
             }
 
@@ -142,7 +125,7 @@ export class InitialCommitDetector {
             const parts = firstLine.split('|');
             
             if (parts.length < 4) {
-                console.warn(`[DEBUG] Unexpected git log format: ${firstLine}`);
+                console.warn(`Unexpected git log format: ${firstLine}`);
                 return null;
             }
 
@@ -150,19 +133,13 @@ export class InitialCommitDetector {
             const message = messageParts.join('|');
             const commitHash = hash.trim();
 
-            console.log(`[DEBUG] Found commit for "${functionName}": ${commitHash.substring(0, 8)} - ${message}`);
-
             // If rename detection is enabled and this isn't already a deep search,
             // check if this commit contains a rename
             if (enableRenameDetection && depth < maxDepth) {
-                console.log(`[DEBUG] Checking for renames in commit ${commitHash.substring(0, 8)}`);
-                
                 const diffOutput = await this.getCommitDiff(commitHash, filePath, workspaceRoot);
                 const oldFunctionName = this.parseRenameFromDiff(diffOutput, functionName, filePath);
                 
                 if (oldFunctionName && oldFunctionName !== functionName) {
-                    console.log(`[DEBUG] Detected rename: "${oldFunctionName}" -> "${functionName}" in commit ${commitHash.substring(0, 8)}`);
-                    
                     // Create rename info
                     const renameInfo: RenameInfo = {
                         oldName: oldFunctionName,
@@ -207,19 +184,7 @@ export class InitialCommitDetector {
                 wasRenamed: renameHistory.length > 0
             };
 
-            console.log(`[DEBUG] Final initial commit for "${functionName}": ${commitHash.substring(0, 8)} - ${message.trim()}`);
-            if (renameHistory.length > 0) {
-                // Build the correct chain: start with original function, follow the renames
-                const chain = [functionName]; // Start with the original function (calc_interest)
-                
-                // The renameHistory array is already in chronological order:
-                // [calc_interest -> calculate_simple_interest, calculate_simple_interest -> compute_interest_amount]
-                // So we just need to add each newName in order
-                for (const rename of renameHistory) {
-                    chain.push(rename.newName);
-                }
-                console.log(`[DEBUG] Rename chain: ${chain.join(' -> ')}`);
-            }
+
             
             return initialCommit;
 
@@ -304,7 +269,6 @@ export class InitialCommitDetector {
 
         // Otherwise, we'd need to integrate with AST analysis to find the function name
         // For now, return null - this will be connected when we integrate with the context builder
-        console.log(`[DEBUG] No function context provided for line range ${startLine}-${endLine}`);
         return null;
     }
 
@@ -313,7 +277,6 @@ export class InitialCommitDetector {
      */
     private runGitCommand(args: string[], workspaceRoot: string): Promise<string> {
         return new Promise((resolve, reject) => {
-            console.log(`[DEBUG] Spawning git process with args: ${args.join(' ')}`);
             const git = spawn('git', args, {
                 cwd: workspaceRoot,
                 stdio: ['pipe', 'pipe', 'pipe']
@@ -331,22 +294,14 @@ export class InitialCommitDetector {
             });
 
             git.on('close', (code) => {
-                console.log(`[DEBUG] Git command completed with code: ${code}`);
-                if (stderr) {
-                    console.log(`[DEBUG] Git stderr: ${stderr}`);
-                }
-                console.log(`[DEBUG] Git stdout length: ${stdout.length} characters`);
-                
                 if (code === 0) {
                     resolve(stdout);
                 } else {
-                    console.log(`[DEBUG] Git command failed: ${stderr}`);
                     reject(new Error(`Git command failed with code ${code}: ${stderr}`));
                 }
             });
 
             git.on('error', (error) => {
-                console.log(`[DEBUG] Git spawn error: ${error.message}`);
                 reject(error);
             });
         });
@@ -359,46 +314,38 @@ export class InitialCommitDetector {
         try {
             // First, find the line number where the function is defined
             const grepArgs = ['grep', '-n', `def ${functionName}`, relativePath];
-            console.log(`[DEBUG] Finding function line: git ${grepArgs.join(' ')}`);
             
             const grepOutput = await this.runGitCommand(grepArgs, workspaceRoot);
             if (!grepOutput.trim()) {
-                console.log(`[DEBUG] Could not find function definition line`);
                 return '';
             }
 
             // Extract line number (format: "filename:lineNumber:content" or "lineNumber:content")
             const lineMatch = grepOutput.match(/(?:^|:)(\d+):/);
             if (!lineMatch) {
-                console.log(`[DEBUG] Could not parse line number from grep output: ${grepOutput}`);
                 return '';
             }
 
             const lineNumber = lineMatch[1];
-            console.log(`[DEBUG] Function found at line ${lineNumber}`);
 
             // Use git blame to find when that line was added
             const blameArgs = ['blame', '-L', `${lineNumber},${lineNumber}`, '--porcelain', relativePath];
-            console.log(`[DEBUG] Trying git blame: git ${blameArgs.join(' ')}`);
             
             const blameOutput = await this.runGitCommand(blameArgs, workspaceRoot);
             
             // Parse blame output to get commit hash
             const commitMatch = blameOutput.match(/^([a-f0-9]+)/);
             if (!commitMatch) {
-                console.log(`[DEBUG] Could not parse commit from blame output`);
                 return '';
             }
 
             const commitHash = commitMatch[1];
-            console.log(`[DEBUG] Found commit from blame: ${commitHash}`);
 
             // Get commit details
             const showArgs = ['show', '--format=%H|%an|%ad|%s', '--date=iso', '--no-patch', commitHash];
             return await this.runGitCommand(showArgs, workspaceRoot);
             
         } catch (error) {
-            console.log(`[DEBUG] git blame strategy failed: ${error}`);
             return '';
         }
     }
@@ -422,21 +369,16 @@ export class InitialCommitDetector {
         currentFunctionName: string, 
         filePath: string
     ): string | null {
-        console.log(`[DEBUG] Analyzing diff for renames of "${currentFunctionName}"`);
-        
-        // Different patterns for different languages
         const fileExtension = path.extname(filePath).toLowerCase();
         const patterns = this.getRenamePatterns(fileExtension);
         
         for (const pattern of patterns) {
             const renameMatch = this.findRenameInDiff(diffOutput, currentFunctionName, pattern);
             if (renameMatch) {
-                console.log(`[DEBUG] Found rename: "${renameMatch}" -> "${currentFunctionName}"`);
                 return renameMatch;
             }
         }
         
-        console.log(`[DEBUG] No rename detected for "${currentFunctionName}"`);
         return null;
     }
 
@@ -520,9 +462,6 @@ export class InitialCommitDetector {
         
         // Reset regex state
         pattern.add.lastIndex = 0;
-        
-        console.log(`[DEBUG] Removed functions: [${removedFunctions.join(', ')}]`);
-        console.log(`[DEBUG] Added functions: [${addedFunctions.join(', ')}]`);
         
         // If current function was added and there's exactly one removed function,
         // it's likely a rename
@@ -608,12 +547,9 @@ export class InitialCommitDetector {
     private async getCommitDiff(commitHash: string, filePath: string, workspaceRoot: string): Promise<string> {
         const relativePath = path.relative(workspaceRoot, filePath);
         const args = ['show', commitHash, '--', relativePath];
-        console.log(`[DEBUG] Getting diff for commit ${commitHash}: git ${args.join(' ')}`);
-        
         try {
             return await this.runGitCommand(args, workspaceRoot);
         } catch (error) {
-            console.log(`[DEBUG] Failed to get commit diff: ${error}`);
             return '';
         }
     }
