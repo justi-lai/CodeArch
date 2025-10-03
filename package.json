@@ -73,14 +73,15 @@
           "type": "webview",
           "id": "codescribe.resultsView",
           "name": "Results",
-          "when": "true"
+          "when": "true",
+          "size": 1
         },
         {
           "type": "webview",
           "id": "codescribe.chatView",
           "name": "Chat",
           "when": "true",
-          "visibility": "collapsed"
+          "size": 1
         }
       ]
     },

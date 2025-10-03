@@ -33,13 +33,16 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
     private _context: ChatContext[] = [];
     private _messages: ChatMessage[] = [];
     private _currentMode: 'code' = 'code';
+    private _updateThrottleTimeout?: NodeJS.Timeout;
+    private _pendingUpdate = false;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private readonly _apiKeyManager: ApiKeyManager,
-        private readonly _codeScribeProvider?: CodeScribeWebviewProvider
+        private readonly _codeScribeProvider?: CodeScribeWebviewProvider,
+        private readonly _extensionContext?: vscode.ExtensionContext
     ) {
-        this._chatService = new ChatService();
+        this._chatService = new ChatService(this._extensionContext);
         this._gitAnalysisEngine = new GitAnalysisEngine();
     }
 
@@ -55,13 +58,16 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
             localResourceRoots: [this._extensionUri]
         };
 
-        // Try to set a reasonable initial height
+        // Try to set a reasonable initial height and configuration
         if (webviewView.description !== undefined) {
             webviewView.description = '';
         }
         
         // Set badge to indicate it's available
         webviewView.badge = undefined;
+        
+        // Store reference for ensuring visibility
+        this._view = webviewView;
 
         // Handle messages from webview
         webviewView.webview.onDidReceiveMessage(
@@ -82,6 +88,9 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                     case 'clearChat':
                         this._clearChat();
                         break;
+                    case 'newChat':
+                        this._newChat();
+                        break;
                 }
             }
         );
@@ -89,7 +98,10 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         this._updateWebview();
     }
 
-    public addContext(context: ChatContext) {
+    public async addContext(context: ChatContext) {
+        // Ensure the chat view is visible first
+        await this.ensureVisible();
+        
         // Check if this exact context already exists
         const existingIndex = this._context.findIndex(c => 
             c.filePath === context.filePath && 
@@ -101,11 +113,11 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         // If exact same context exists, don't add duplicate
         if (existingIndex === -1) {
             this._context.push(context);
-            this._updateWebview();
+            this._updateContextOnly();
         }
     }
 
-    public addCodeContext(code: string, filePath?: string, startLine?: number, endLine?: number) {
+    public async addCodeContext(code: string, filePath?: string, startLine?: number, endLine?: number) {
         const context: ChatContext = {
             id: this._generateId(),
             type: 'code',
@@ -117,10 +129,10 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
             title: this._generateContextTitle('code', filePath, startLine, endLine)
         };
         
-        this.addContext(context);
+        await this.addContext(context);
     }
 
-    public addAnalysisContext(analysis: string, filePath?: string) {
+    public async addAnalysisContext(analysis: string, filePath?: string) {
         const context: ChatContext = {
             id: this._generateId(),
             type: 'analysis',
@@ -130,14 +142,11 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
             title: this._generateContextTitle('analysis', filePath)
         };
         
-        this.addContext(context);
+        await this.addContext(context);
     }
 
     private async _handleSendMessage(content: string) {
         if (!content.trim()) return;
-
-        // Automatically add current analyzed context before sending
-        await this._ensureCurrentAnalysisContext();
 
         // Add user message
         const userMessage: ChatMessage = {
@@ -169,28 +178,50 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
             this._messages.push(typingMessage);
             this._updateWebview();
             
-            // Get AI response
-            const response = await this._chatService.sendMessage(
+            // Remove typing indicator and add streaming response message
+            const typingIndex = this._messages.findIndex(m => m.id === typingId);
+            if (typingIndex !== -1) {
+                this._messages.splice(typingIndex, 1);
+            }
+
+            // Create streaming response message
+            const responseMessage: ChatMessage = {
+                id: this._generateId(),
+                role: 'assistant',
+                content: '',
+                timestamp: new Date(),
+                mode: this._currentMode
+            };
+            
+            this._messages.push(responseMessage);
+            this._updateWebview();
+
+            // Get AI response with streaming
+            await this._chatService.sendMessageStream(
                 content,
                 this._currentMode,
                 this._context,
-                this._messages.slice(0, -2), // Exclude the user message and typing indicator
-                apiKey
+                this._messages.slice(0, -1), // Exclude the streaming response message
+                apiKey,
+                (token: string) => {
+                    // Update the response message with new token
+                    console.log('Token received in webview:', token);
+                    responseMessage.content += token;
+                    this._throttledUpdateMessages();
+                },
+                () => {
+                    // Streaming complete - do final update
+                    if (this._updateThrottleTimeout) {
+                        clearTimeout(this._updateThrottleTimeout);
+                    }
+                    this._updateMessagesOnly();
+                    console.log('Streaming complete. Final content:', responseMessage.content);
+                },
+                (error: Error) => {
+                    // Handle streaming error
+                    throw error;
+                }
             );
-
-            // Replace typing indicator with actual response
-            const typingIndex = this._messages.findIndex(m => m.id === typingId);
-            if (typingIndex !== -1) {
-                this._messages[typingIndex] = {
-                    id: typingId,
-                    role: 'assistant',
-                    content: response,
-                    timestamp: new Date(),
-                    mode: this._currentMode
-                };
-            }
-            
-            this._updateWebview();
         } catch (error) {
             console.error('Chat error:', error);
             
@@ -270,7 +301,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
 
         const selectedText = editor.document.getText(editor.selection);
         console.log('Adding selection context:', selectedText.length, 'characters');
-        this.addCodeContext(
+        await this.addCodeContext(
             selectedText,
             editor.document.uri.fsPath,
             editor.selection.start.line + 1,
@@ -288,7 +319,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
 
         const fileContent = editor.document.getText();
         console.log('Adding file context:', editor.document.uri.fsPath, fileContent.length, 'characters');
-        this.addCodeContext(fileContent, editor.document.uri.fsPath);
+        await this.addCodeContext(fileContent, editor.document.uri.fsPath);
         vscode.window.showInformationMessage(`Added file context: ${editor.document.fileName} (${fileContent.length} characters)`);
     }
 
@@ -358,7 +389,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         };
 
         this._context.push(context);
-        this._updateWebview();
+        this._updateContextOnly();
     }
 
 
@@ -460,7 +491,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
 
         // Only add the analysis summary (code is auto-added on send)
         console.log('Adding analysis context:', currentResults.summary.length, 'characters');
-        this.addAnalysisContext(currentResults.summary, 'CodeScribe Analysis');
+        await this.addAnalysisContext(currentResults.summary, 'CodeScribe Analysis');
         
         vscode.window.showInformationMessage(
             `Added analysis context: ${currentResults.summary.length} chars of analysis`
@@ -469,12 +500,26 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
 
     private _removeContext(contextId: string) {
         this._context = this._context.filter(c => c.id !== contextId);
-        this._updateWebview();
+        this._updateContextOnly();
     }
 
     private _clearChat() {
         this._messages = [];
         this._updateWebview();
+    }
+
+    private _newChat() {
+        // Clear messages and context to start fresh
+        this._messages = [];
+        this._context = [];
+        this._updateWebview();
+    }
+
+    public async ensureVisible() {
+        // Ensure the chat view is visible and expanded
+        if (this._view) {
+            await vscode.commands.executeCommand('codescribe.chatView.focus');
+        }
     }
 
     private _generateId(): string {
@@ -496,6 +541,54 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         if (this._view) {
             this._view.webview.html = this._getHtmlForWebview();
         }
+    }
+
+    private _updateContextOnly() {
+        if (this._view) {
+            // Send a message to update context without resetting the entire HTML
+            this._view.webview.postMessage({
+                command: 'updateContext',
+                context: this._context
+            });
+        }
+    }
+
+    private _updateMessagesOnly() {
+        if (this._view) {
+            // Send a message to update messages without resetting the entire HTML
+            this._view.webview.postMessage({
+                command: 'updateMessages',
+                messages: this._getMessagesHTML()
+            });
+        }
+    }
+
+    private _throttledUpdateWebview() {
+        if (this._updateThrottleTimeout) {
+            clearTimeout(this._updateThrottleTimeout);
+        }
+        
+        this._pendingUpdate = true;
+        this._updateThrottleTimeout = setTimeout(() => {
+            if (this._pendingUpdate) {
+                this._updateWebview();
+                this._pendingUpdate = false;
+            }
+        }, 100); // Update every 100ms during streaming
+    }
+
+    private _throttledUpdateMessages() {
+        if (this._updateThrottleTimeout) {
+            clearTimeout(this._updateThrottleTimeout);
+        }
+        
+        this._pendingUpdate = true;
+        this._updateThrottleTimeout = setTimeout(() => {
+            if (this._pendingUpdate) {
+                this._updateMessagesOnly();
+                this._pendingUpdate = false;
+            }
+        }, 100); // Update every 100ms during streaming
     }
 
     private _getHtmlForWebview(): string {
@@ -552,6 +645,13 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                                     </div>
                                 `).join('')}
                             </div>
+                        </div>
+                        <!-- New Chat button -->
+                        <div class="chat-controls">
+                            <button class="new-chat-btn" onclick="newChat()" title="Start a new chat">
+                                <span class="codicon codicon-refresh"></span>
+                                New
+                            </button>
                         </div>
 
                     </div>
@@ -681,12 +781,62 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
     }
 
     private _formatMessageContent(content: string): string {
-        // Basic markdown-style formatting
-        return content
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/`(.*?)`/g, '<code>$1</code>')
-            .replace(/\n/g, '<br>');
+        return this._parseMarkdown(content);
+    }
+
+    private _parseMarkdown(markdown: string): string {
+        let html = markdown;
+
+        // Escape HTML to prevent injection, but preserve our markdown
+        html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        // Code blocks (must be processed before inline code)
+        html = html.replace(/```(\w+)?\n([\s\S]*?)\n```/g, (match, lang, code) => {
+            const language = lang ? ` class="language-${lang}"` : '';
+            return `<pre><code${language}>${code.trim()}</code></pre>`;
+        });
+
+        // Inline code
+        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+        // Headers
+        html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+        html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+        html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+
+        // Bold and italic (bold first to avoid conflicts)
+        html = html.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
+        html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+        // Links
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+        // Lists (unordered) - process consecutive list items
+        html = html.replace(/^- (.*$)/gm, '<li>$1</li>');
+        html = html.replace(/(<li>.*?<\/li>(?:\n<li>.*?<\/li>)*)/gm, '<ul>$1</ul>');
+
+        // Lists (ordered) - process consecutive numbered list items
+        html = html.replace(/^\d+\. (.*$)/gm, '<li class="ordered">$1</li>');
+        html = html.replace(/(<li class="ordered">.*?<\/li>(?:\n<li class="ordered">.*?<\/li>)*)/gm, (match) => {
+            // Remove the "ordered" class and wrap in ol
+            const cleanedMatch = match.replace(/ class="ordered"/g, '');
+            return '<ol>' + cleanedMatch + '</ol>';
+        });
+
+        // Blockquotes
+        html = html.replace(/^> (.*$)/gm, '<blockquote>$1</blockquote>');
+
+        // Horizontal rules
+        html = html.replace(/^---$/gm, '<hr>');
+
+        // Line breaks (convert remaining \n to <br>, but not inside pre/code blocks)
+        html = html.replace(/\n(?!<\/?(pre|code|ul|ol|li|h[1-6]|blockquote))/g, '<br>');
+
+        // Clean up multiple br tags
+        html = html.replace(/(<br>\s*){3,}/g, '<br><br>');
+
+        return html;
     }
 
     private _formatTime(timestamp: Date): string {
@@ -713,7 +863,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
 
             body {
                 font-family: var(--vscode-font-family);
-                font-size: 12px;
+                font-size: 13px;
                 background-color: var(--vscode-sideBar-background);
                 color: var(--vscode-foreground);
                 margin: 0;
@@ -747,7 +897,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                 display: flex;
                 flex-direction: column;
                 gap: 4px;
-                font-size: 11px;
+                font-size: 12px;
                 margin-bottom: 12px;
             }
 
@@ -822,6 +972,101 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                 30% { opacity: 1; }
             }
 
+            /* Markdown Styles */
+            .message-content h1, .message-content h2, .message-content h3 {
+                color: var(--vscode-foreground);
+                margin: 16px 0 8px 0;
+                font-weight: 600;
+                line-height: 1.2;
+            }
+
+            .message-content h1 { 
+                font-size: 1.4em; 
+                border-bottom: 1px solid var(--vscode-panel-border);
+                padding-bottom: 4px;
+            }
+            .message-content h2 { 
+                font-size: 1.2em; 
+                border-bottom: 1px solid var(--vscode-panel-border);
+                padding-bottom: 2px;
+            }
+            .message-content h3 { 
+                font-size: 1.1em; 
+            }
+
+            .message-content pre {
+                background-color: var(--vscode-textCodeBlock-background);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 6px;
+                padding: 12px;
+                margin: 12px 0;
+                overflow-x: auto;
+                font-family: var(--vscode-editor-font-family);
+                font-size: 0.9em;
+                line-height: 1.4;
+            }
+
+            .message-content code {
+                background-color: var(--vscode-textCodeBlock-background);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 3px;
+                padding: 2px 4px;
+                font-family: var(--vscode-editor-font-family);
+                font-size: 0.9em;
+                color: var(--vscode-textPreformat-foreground);
+            }
+
+            .message-content pre code {
+                background: none;
+                border: none;
+                padding: 0;
+                border-radius: 0;
+            }
+
+            .message-content ul, .message-content ol {
+                margin: 8px 0;
+                padding-left: 24px;
+            }
+
+            .message-content li {
+                margin: 4px 0;
+                line-height: 1.4;
+            }
+
+            .message-content blockquote {
+                border-left: 4px solid var(--vscode-textLink-foreground);
+                margin: 12px 0;
+                padding: 8px 16px;
+                background-color: var(--vscode-textBlockQuote-background);
+                font-style: italic;
+                border-radius: 0 4px 4px 0;
+            }
+
+            .message-content hr {
+                border: none;
+                border-top: 1px solid var(--vscode-panel-border);
+                margin: 16px 0;
+            }
+
+            .message-content a {
+                color: var(--vscode-textLink-foreground);
+                text-decoration: none;
+            }
+
+            .message-content a:hover {
+                text-decoration: underline;
+            }
+
+            .message-content strong {
+                font-weight: 600;
+                color: var(--vscode-foreground);
+            }
+
+            .message-content em {
+                font-style: italic;
+                color: var(--vscode-foreground);
+            }
+
             /* Input area */
             .input-area {
                 position: absolute;
@@ -873,6 +1118,32 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
             }
 
             .add-context-btn:hover {
+                background-color: var(--vscode-button-secondaryHoverBackground);
+            }
+
+            .chat-controls {
+                display: flex;
+                align-items: center;
+                margin-left: auto;
+                flex-shrink: 0;
+            }
+
+            .new-chat-btn {
+                background: none;
+                border: 1px solid var(--vscode-button-border);
+                color: var(--vscode-button-secondaryForeground);
+                cursor: pointer;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-size: 10px;
+                display: flex;
+                align-items: center;
+                gap: 3px;
+                height: 20px;
+                flex-shrink: 0;
+            }
+
+            .new-chat-btn:hover {
                 background-color: var(--vscode-button-secondaryHoverBackground);
             }
 
@@ -1002,8 +1273,8 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
             .context-chip {
                 background-color: var(--vscode-textCodeBlock-background);
                 color: var(--vscode-textPreformat-foreground);
-                border-radius: 4px;
-                padding: 3px 8px;
+                border-radius: 3px;
+                padding: 1px 6px;
                 font-size: 10px;
                 white-space: nowrap;
                 cursor: pointer;
@@ -1011,6 +1282,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                 flex-shrink: 0;
                 transition: all 0.2s;
                 border: 1px solid var(--vscode-input-border);
+                margin: 1px 2px;
             }
 
             .context-chip:hover {
@@ -1060,7 +1332,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                 padding: 8px 32px 8px 8px;
                 resize: none;
                 font-family: var(--vscode-font-family);
-                font-size: 11px;
+                font-size: 12px;
                 line-height: 1.4;
                 min-height: 32px;
                 max-height: 120px;
@@ -1250,6 +1522,13 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
             }
 
             function removeContext(contextId) {
+                // Immediately hide the context chip for better UX
+                const chipElement = event.target.closest('.context-chip');
+                if (chipElement) {
+                    chipElement.style.opacity = '0.3';
+                    chipElement.style.pointerEvents = 'none';
+                }
+                
                 vscode.postMessage({
                     command: 'removeContext',
                     contextId: contextId
@@ -1259,6 +1538,35 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
             function clearChat() {
                 vscode.postMessage({
                     command: 'clearChat'
+                });
+            }
+
+            function updateContextDisplay(context) {
+                // Update the context display without refreshing the entire page
+                const contextContainer = document.getElementById('contextChipsContainer');
+                if (contextContainer) {
+                    contextContainer.innerHTML = context.map(ctx => \`
+                        <div class="context-chip" onclick="removeContext('\${ctx.id}')" title="Click to remove: \${ctx.title}">
+                            <span class="context-chip-text">\${ctx.title}</span>
+                        </div>
+                    \`).join('');
+                }
+            }
+
+            function updateMessagesDisplay(messagesHTML) {
+                // Update the messages display without refreshing the entire page
+                const messagesContainer = document.getElementById('messagesContainer');
+                if (messagesContainer) {
+                    messagesContainer.innerHTML = messagesHTML;
+                    // Scroll to bottom to show new messages
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+            }
+
+            function newChat() {
+                // Clear the current chat
+                vscode.postMessage({
+                    command: 'newChat'
                 });
             }
 
@@ -1342,6 +1650,12 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                 switch (message.command) {
                     case 'showGitDiffDropdown':
                         showGitDiffDropdown(message.commits);
+                        break;
+                    case 'updateContext':
+                        updateContextDisplay(message.context);
+                        break;
+                    case 'updateMessages':
+                        updateMessagesDisplay(message.messages);
                         break;
                 }
             });

@@ -6,6 +6,37 @@ export class ChatService {
     private readonly maxTokens = 8192;
     private readonly temperature = 0.7;
     private static readonly API_KEY_SECRET = 'codescribe.gemini.apiKey';
+    
+    constructor(private readonly context?: vscode.ExtensionContext) {}
+
+    private async getSelectedModel(provider: string): Promise<string> {
+        if (!this.context) {
+            // Fallback to config if no context available
+            const config = vscode.workspace.getConfiguration('codescribe');
+            switch (provider) {
+                case 'gemini': return config.get<string>('geminiModel', 'gemini-2.0-flash-exp');
+                case 'openai': return config.get<string>('openaiModel', 'gpt-4o-mini');
+                case 'claude': return config.get<string>('claudeModel', 'claude-sonnet-4-20250514');
+                case 'huggingface': return config.get<string>('huggingfaceModel', 'microsoft/DialoGPT-large');
+                default: return 'unknown';
+            }
+        }
+
+        // Get from global state (preferred method)
+        const storedModel = await this.context.globalState.get(`codescribe.model.${provider}`) as string;
+        if (storedModel) {
+            return storedModel;
+        }
+
+        // Fallback to defaults if not found in global state
+        switch (provider) {
+            case 'gemini': return 'gemini-2.0-flash-exp';
+            case 'openai': return 'gpt-4o-mini';
+            case 'claude': return 'claude-sonnet-4-20250514';
+            case 'huggingface': return 'microsoft/DialoGPT-large';
+            default: return 'unknown';
+        }
+    }
 
     async sendMessage(
         message: string,
@@ -41,24 +72,102 @@ export class ChatService {
         }
     }
 
-    private async executeProviderQuery(provider: string, prompt: string, apiKey: string): Promise<string> {
+    async sendMessageStream(
+        message: string,
+        mode: 'code',
+        context: ChatContext[],
+        previousMessages: ChatMessage[] = [],
+        apiKey: string,
+        onToken: (token: string) => void,
+        onComplete?: () => void,
+        onError?: (error: Error) => void
+    ): Promise<void> {
         const config = vscode.workspace.getConfiguration('codescribe');
+        const provider = config.get<string>('aiProvider', 'gemini');
+
+        if (!apiKey || apiKey.trim() === '') {
+            const error = new Error(`${provider} API key not configured. Please run "CodeScribe: Configure API Key" command first.`);
+            onError?.(error);
+            return;
+        }
+
+        const prompt = this._buildPrompt(message, mode, context, previousMessages);
+
+        try {
+            await this.executeProviderStreamQuery(provider, prompt, apiKey, onToken, onComplete, onError);
+        } catch (error) {
+            const processedError = this._processError(error as any, provider);
+            onError?.(processedError);
+        }
+    }
+
+    private _processError(error: any, provider: string): Error {
+        if (axios.isAxiosError(error)) {
+            if (error.response?.status === 400) {
+                return new Error('Invalid request to AI service. Please check your input.');
+            } else if (error.response?.status === 401) {
+                return new Error(`Invalid API key. Please check your ${provider} API key in settings.`);
+            } else if (error.response?.status === 429) {
+                return new Error('Rate limit exceeded. Please try again in a moment.');
+            } else {
+                return new Error(`AI service error: ${error.response?.statusText || error.message}`);
+            }
+        }
+        return error;
+    }
+
+    private async executeProviderQuery(provider: string, prompt: string, apiKey: string): Promise<string> {
+        const model = await this.getSelectedModel(provider);
         
         switch (provider) {
             case 'gemini':
-                return this.executeGeminiQuery(prompt, config.get<string>('geminiModel', 'gemini-1.5-pro'), apiKey);
+                return this.executeGeminiQuery(prompt, model, apiKey);
             case 'openai':
-                return this.executeOpenAIQuery(prompt, config.get<string>('openaiModel', 'gpt-4o-mini'), apiKey);
+                return this.executeOpenAIQuery(prompt, model, apiKey);
             case 'claude':
-                return this.executeClaudeQuery(prompt, config.get<string>('claudeModel', 'claude-3-5-sonnet-20241022'), apiKey);
+                return this.executeClaudeQuery(prompt, model, apiKey);
             case 'huggingface':
-                const model = config.get<string>('huggingfaceModel');
                 if (!model || model.trim() === '') {
                     throw new Error('Hugging Face model ID is required. Please configure a model in settings (e.g., "microsoft/DialoGPT-large").');
                 }
                 return this.executeHuggingFaceQuery(prompt, model, apiKey);
             default:
                 throw new Error(`Unsupported provider: ${provider}`);
+        }
+    }
+
+    private async executeProviderStreamQuery(
+        provider: string,
+        prompt: string,
+        apiKey: string,
+        onToken: (token: string) => void,
+        onComplete?: () => void,
+        onError?: (error: Error) => void
+    ): Promise<void> {
+        const model = await this.getSelectedModel(provider);
+        
+        switch (provider) {
+            case 'gemini':
+                return this.executeGeminiStreamQuery(prompt, model, apiKey, onToken, onComplete, onError);
+            case 'openai':
+                return this.executeOpenAIStreamQuery(prompt, model, apiKey, onToken, onComplete, onError);
+            case 'claude':
+                return this.executeClaudeStreamQuery(prompt, model, apiKey, onToken, onComplete, onError);
+            case 'huggingface':
+                // Hugging Face streaming not implemented yet, fallback to regular query
+                try {
+                    if (!model || model.trim() === '') {
+                        throw new Error('Hugging Face model ID is required. Please configure a model in settings (e.g., "microsoft/DialoGPT-large").');
+                    }
+                    const response = await this.executeHuggingFaceQuery(prompt, model, apiKey);
+                    onToken(response);
+                    onComplete?.();
+                } catch (error) {
+                    onError?.(error as Error);
+                }
+                break;
+            default:
+                onError?.(new Error(`Unsupported provider: ${provider}`));
         }
     }
 
@@ -93,6 +202,111 @@ export class ChatService {
         }
 
         return generatedText;
+    }
+
+    private async executeGeminiStreamQuery(
+        prompt: string, 
+        model: string, 
+        apiKey: string, 
+        onToken: (token: string) => void,
+        onComplete?: () => void,
+        onError?: (error: Error) => void
+    ): Promise<void> {
+        try {
+            const response = await axios.post(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}`,
+                {
+                    contents: [{
+                        parts: [{
+                            text: prompt
+                        }]
+                    }],
+                    generationConfig: {
+                        maxOutputTokens: this.maxTokens,
+                        temperature: this.temperature,
+                        topP: 0.8,
+                        topK: 40
+                    }
+                },
+                {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    responseType: 'stream',
+                    timeout: 30000
+                }
+            );
+
+            let buffer = '';
+            
+            response.data.on('data', (chunk: Buffer) => {
+                const chunkStr = chunk.toString();
+                console.log('Raw Gemini chunk received:', chunkStr);
+                buffer += chunkStr;
+                
+                // Gemini streams an array of JSON objects, split by lines
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep incomplete line in buffer
+                
+                console.log('Processing lines:', lines);
+                
+                for (const line of lines) {
+                    const trimmedLine = line.trim();
+                    console.log('Processing line:', trimmedLine);
+                    if (!trimmedLine || trimmedLine === '[' || trimmedLine === ']' || trimmedLine === ',') {
+                        console.log('Skipping line:', trimmedLine);
+                        continue;
+                    }
+                    
+                    let jsonString = trimmedLine;
+                    
+                    // Remove leading comma if present (array elements)
+                    if (jsonString.startsWith(',')) {
+                        jsonString = jsonString.slice(1).trim();
+                    }
+                    
+                    // Remove trailing comma if present
+                    if (jsonString.endsWith(',')) {
+                        jsonString = jsonString.slice(0, -1).trim();
+                    }
+                    
+                    // Check if this line contains text content
+                    if (jsonString.includes('"text":')) {
+                        try {
+                            // Extract text content from the line
+                            const textMatch = jsonString.match(/"text":\s*"([^"\\]*(\\.[^"\\]*)*)"/);
+                            if (textMatch && textMatch[1]) {
+                                // Unescape the JSON string
+                                const text = textMatch[1]
+                                    .replace(/\\n/g, '\n')
+                                    .replace(/\\t/g, '\t')
+                                    .replace(/\\"/g, '"')
+                                    .replace(/\\\\/g, '\\');
+                                    
+                                console.log('Gemini token received:', text);
+                                onToken(text);
+                            }
+                        } catch (parseError) {
+                            console.warn('Failed to extract text from Gemini line:', jsonString, parseError);
+                        }
+                    }
+                }
+            });
+
+            response.data.on('end', () => {
+                console.log('Gemini stream ended');
+                onComplete?.();
+            });
+
+            response.data.on('error', (error: Error) => {
+                console.error('Gemini stream error:', error);
+                onError?.(error);
+            });
+
+        } catch (error) {
+            console.error('Gemini streaming request failed:', error);
+            onError?.(error as Error);
+        }
     }
 
     private async executeOpenAIQuery(prompt: string, model: string, apiKey: string): Promise<string> {
@@ -132,6 +346,151 @@ export class ChatService {
         return generatedText;
     }
 
+    private async executeOpenAIStreamQuery(
+        prompt: string, 
+        model: string, 
+        apiKey: string, 
+        onToken: (token: string) => void,
+        onComplete?: () => void,
+        onError?: (error: Error) => void
+    ): Promise<void> {
+        try {
+            // Check if this is a GPT-5 model and warn about potential availability issues
+            if (this.isGPT5Model(model)) {
+                console.warn(`Attempting to use GPT-5 model: ${model}. This model may not be available for all accounts.`);
+            }
+
+            const requestBody = {
+                model: model,
+                messages: [{ role: 'user', content: prompt }],
+                stream: true,
+                ...(this.isGPT5Model(model) 
+                    ? { 
+                        max_completion_tokens: this.maxTokens
+                        // GPT-5 models only support default temperature of 1
+                    }
+                    : { 
+                        temperature: this.temperature,
+                        max_tokens: this.maxTokens 
+                    }
+                )
+            };
+
+            console.log('OpenAI request body:', JSON.stringify(requestBody, null, 2));
+            console.log('OpenAI API key present:', !!apiKey);
+
+            const response = await axios.post(
+                'https://api.openai.com/v1/chat/completions',
+                requestBody,
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    responseType: 'stream',
+                    timeout: 30000
+                }
+            );
+
+            let buffer = '';
+            response.data.on('data', (chunk: Buffer) => {
+                buffer += chunk.toString();
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.trim().startsWith('data: ')) {
+                        const jsonStr = line.slice(6).trim();
+                        if (jsonStr === '[DONE]') {
+                            onComplete?.();
+                            return;
+                        }
+                        try {
+                            const data = JSON.parse(jsonStr);
+                            const content = data.choices?.[0]?.delta?.content;
+                            if (content) {
+                                onToken(content);
+                            }
+                        } catch (parseError) {
+                            console.warn('Failed to parse OpenAI stream chunk:', parseError);
+                        }
+                    }
+                }
+            });
+
+            response.data.on('end', () => {
+                onComplete?.();
+            });
+
+            response.data.on('error', (error: Error) => {
+                onError?.(error);
+            });
+
+        } catch (error) {
+            console.error('OpenAI streaming request failed:', error);
+            if (axios.isAxiosError(error) && error.response) {
+                // For streaming responses, we need to read the response body differently
+                let errorBody = '';
+                try {
+                    if (error.response.data && typeof error.response.data.read === 'function') {
+                        // It's a readable stream
+                        const chunks: Buffer[] = [];
+                        error.response.data.on('data', (chunk: Buffer) => chunks.push(chunk));
+                        error.response.data.on('end', () => {
+                            errorBody = Buffer.concat(chunks).toString();
+                            console.error('OpenAI error response body:', errorBody);
+                        });
+                    } else {
+                        try {
+                            errorBody = JSON.stringify(error.response.data);
+                            console.error('OpenAI error response:', errorBody);
+                        } catch (jsonError) {
+                            console.error('OpenAI error response (non-JSON):', error.response.data);
+                            errorBody = '[Complex object - see console]';
+                        }
+                    }
+                } catch (parseError) {
+                    console.error('Failed to parse OpenAI error response:', parseError);
+                }
+                
+                // Check if this is a GPT-5 streaming verification error
+                // We can see from the console log that this is the specific error we're looking for
+                if (error.response.status === 400 && this.isGPT5Model(model)) {
+                    
+                    console.log(`GPT-5 streaming not available, falling back to non-streaming mode for ${model}`);
+                    
+                    // Fallback to non-streaming mode for GPT-5 models
+                    try {
+                        const response = await this.executeOpenAIQuery(prompt, model, apiKey);
+                        // Simulate streaming by sending the full response at once
+                        onToken(response);
+                        onComplete?.();
+                        return;
+                    } catch (fallbackError) {
+                        console.error('GPT-5 non-streaming fallback also failed:', fallbackError);
+                        onError?.(new Error(`GPT-5 model ${model} requires organization verification for streaming. Non-streaming mode also failed. Please verify your organization at https://platform.openai.com/settings/organization/general or use GPT-4o models instead.`));
+                        return;
+                    }
+                }
+                
+                // Create a more specific error message based on status and any available info
+                let errorMessage = `OpenAI API error (${error.response.status})`;
+                if (error.response.status === 400) {
+                    if (this.isGPT5Model(model)) {
+                        errorMessage += `: The ${model} model streaming requires organization verification. Please verify at https://platform.openai.com/settings/organization/general or use GPT-4o models instead.`;
+                    } else {
+                        errorMessage += ': Invalid request. This could be due to an unsupported model or request format.';
+                    }
+                } else if (error.response.status === 404) {
+                    errorMessage += ': Model not found. The specified model may not be available for your account.';
+                }
+                onError?.(new Error(errorMessage));
+            } else {
+                onError?.(error as Error);
+            }
+        }
+    }
+
     private async executeClaudeQuery(prompt: string, model: string, apiKey: string): Promise<string> {
         const response = await axios.post(
             'https://api.anthropic.com/v1/messages',
@@ -158,6 +517,76 @@ export class ChatService {
         }
 
         return generatedText;
+    }
+
+    private async executeClaudeStreamQuery(
+        prompt: string, 
+        model: string, 
+        apiKey: string, 
+        onToken: (token: string) => void,
+        onComplete?: () => void,
+        onError?: (error: Error) => void
+    ): Promise<void> {
+        try {
+            const response = await axios.post(
+                'https://api.anthropic.com/v1/messages',
+                {
+                    model: model,
+                    max_tokens: this.maxTokens,
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature: this.temperature,
+                    stream: true
+                },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': apiKey,
+                        'anthropic-version': '2023-06-01'
+                    },
+                    responseType: 'stream',
+                    timeout: 30000
+                }
+            );
+
+            let buffer = '';
+            response.data.on('data', (chunk: Buffer) => {
+                buffer += chunk.toString();
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.trim().startsWith('data: ')) {
+                        const jsonStr = line.slice(6).trim();
+                        if (jsonStr === '[DONE]') {
+                            onComplete?.();
+                            return;
+                        }
+                        try {
+                            const data = JSON.parse(jsonStr);
+                            if (data.type === 'content_block_delta' && data.delta?.text) {
+                                onToken(data.delta.text);
+                            } else if (data.type === 'message_stop') {
+                                onComplete?.();
+                                return;
+                            }
+                        } catch (parseError) {
+                            console.warn('Failed to parse Claude stream chunk:', parseError);
+                        }
+                    }
+                }
+            });
+
+            response.data.on('end', () => {
+                onComplete?.();
+            });
+
+            response.data.on('error', (error: Error) => {
+                onError?.(error);
+            });
+
+        } catch (error) {
+            onError?.(error as Error);
+        }
     }
 
     private async executeHuggingFaceQuery(prompt: string, model: string, apiKey: string): Promise<string> {

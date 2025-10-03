@@ -16,7 +16,7 @@ export function activate(context: vscode.ExtensionContext) {
     const gitAnalysisEngine = new GitAnalysisEngine();
     const aiSummaryService = new AiSummaryService(context);
     const webviewProvider = new CodeScribeWebviewProvider(context.extensionUri);
-    const chatWebviewProvider = new ChatWebviewProvider(context.extensionUri, apiKeyManager, webviewProvider);
+    const chatWebviewProvider = new ChatWebviewProvider(context.extensionUri, apiKeyManager, webviewProvider, context);
 
     // Register webview providers
     context.subscriptions.push(
@@ -274,15 +274,25 @@ export function activate(context: vscode.ExtensionContext) {
         const currentProvider = config.get<string>('aiProvider', 'gemini');
         
         const modelOptions = getModelsForProvider(currentProvider);
-        const currentModel = await context.globalState.get(`codescribe.model.${currentProvider}`) || modelOptions[0].value;
+        const currentModel = (await context.globalState.get(`codescribe.model.${currentProvider}`) as string) || modelOptions[0].value;
+        
+        // For Hugging Face, if we have a custom model that's not 'custom', add it to the options
+        if (currentProvider === 'huggingface' && currentModel && currentModel !== 'custom' && !modelOptions.find(opt => opt.value === currentModel)) {
+            modelOptions.unshift({
+                label: `${currentModel} (Custom)`,
+                description: 'Your custom Hugging Face model',
+                value: currentModel
+            });
+        }
         
         const selection = await vscode.window.showQuickPick(
             modelOptions.map(option => ({
                 ...option,
+                label: option.value === currentModel ? `${option.label} (Current)` : option.label,
                 picked: option.value === currentModel
             })),
             {
-                placeHolder: `Select ${currentProvider.toUpperCase()} model`,
+                placeHolder: `Select ${currentProvider.toUpperCase()} model (Current: ${modelOptions.find(opt => opt.value === currentModel)?.label || currentModel})`,
                 matchOnDescription: true,
                 matchOnDetail: true
             }

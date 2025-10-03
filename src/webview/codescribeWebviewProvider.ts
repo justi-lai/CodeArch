@@ -854,7 +854,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
                     suggestionsHtml = `
                         <div>
                             <strong>Suggestions:</strong> 
-                            <span style="color: var(--vscode-charts-green);">✓ ${suggestions}</span>
+                            <span style="color: var(--vscode-charts-green);">${suggestions}</span>
                         </div>`;
                 } else {
                     // Parse multiple suggestions (split by periods or numbered items)
