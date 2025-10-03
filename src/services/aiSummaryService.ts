@@ -223,7 +223,7 @@ export class AiSummaryService {
                 }
             } catch (error) {
                 // If we can't get surrounding context, just continue with selected code
-                console.log('Could not get surrounding context:', error);
+
             }
         }
         
@@ -401,11 +401,12 @@ IMPORTANT RULES:
             }
         };
 
-        const response = await axios.post(url, requestBody, {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
+        try {
+            const response = await axios.post(url, requestBody, {
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
 
         let generatedText = '';
         const candidates = response.data.candidates;
@@ -427,6 +428,21 @@ IMPORTANT RULES:
         }
 
         return generatedText;
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                if (error.response?.status === 429) {
+                    throw new Error(`Rate limit exceeded for Gemini API. Please wait a moment before trying again, or consider switching to a different AI provider.`);
+                }
+                if (error.response?.status === 401) {
+                    throw new Error(`Invalid Gemini API key. Please check your API key configuration.`);
+                }
+                if (error.response?.status === 403) {
+                    throw new Error(`Access denied to Gemini API. Please check your API key permissions.`);
+                }
+                throw new Error(`Gemini API error (${error.response?.status}): ${error.response?.data?.error?.message || error.message}`);
+            }
+            throw error;
+        }
     }
 
     private async executeOpenAIQuery(query: string, model: string, apiKey: string): Promise<string> {
@@ -881,7 +897,7 @@ IMPORTANT RULES:
 }
 </style>`;
         } catch (parseError) {
-            console.warn('Failed to parse JSON response, falling back to plain text:', parseError);
+
             // Fallback: return the raw response wrapped in basic formatting
             return `
 <div class="code-analysis">

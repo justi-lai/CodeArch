@@ -231,8 +231,6 @@ export class GitAnalysisEngine {
                 // Parse new hunk
                 const match = line.match(/@@\s*-(\d+)(?:,(\d+))?\s*\+(\d+)(?:,(\d+))?\s*@@/);
                 if (match) {
-                    const oldStart = parseInt(match[1]);
-                    const oldCount = parseInt(match[2]) || 1;
                     const newStart = parseInt(match[3]);
                     const newCount = parseInt(match[4]) || 1;
                     

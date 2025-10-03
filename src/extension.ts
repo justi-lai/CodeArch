@@ -8,7 +8,6 @@ import { AiSummaryService } from './services/aiSummaryService';
 import { ErrorHandler, UserFeedback } from './services/errorHandler';
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('CodeScribe extension is now active!');
 
     // Initialize services
     const dependencyValidator = new DependencyValidator();

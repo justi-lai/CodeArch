@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 const Parser = require('tree-sitter');
 
 // Type definitions for tree-sitter
@@ -9,10 +8,6 @@ interface SyntaxNode {
     endPosition: { row: number; column: number };
     childCount: number;
     child(index: number): SyntaxNode | null;
-}
-
-interface Tree {
-    rootNode: SyntaxNode;
 }
 
 // Language parsers - we'll import them as needed
@@ -58,7 +53,6 @@ export class ASTAnalysisService {
     async analyzeCode(
         code: string,
         language: string,
-        filePath: string,
         startLine: number,
         endLine: number
     ): Promise<CodeStructure> {
@@ -186,7 +180,7 @@ export class ASTAnalysisService {
     private traverseNode(node: SyntaxNode, structure: CodeStructure, sourceCode: string): void {
         const astNode: ASTNode = {
             type: node.type,
-            name: this.extractNodeName(node, sourceCode),
+            name: this.extractNodeName(node),
             startPosition: node.startPosition,
             endPosition: node.endPosition,
             text: node.text,
@@ -235,7 +229,7 @@ export class ASTAnalysisService {
         }
     }
 
-    private extractNodeName(node: SyntaxNode, sourceCode: string): string | undefined {
+    private extractNodeName(node: SyntaxNode): string | undefined {
         // Try to find identifier nodes that represent the name
         const identifierTypes = ['identifier', 'property_identifier', 'type_identifier'];
         

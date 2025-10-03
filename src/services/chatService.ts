@@ -5,7 +5,6 @@ import { ChatContext, ChatMessage } from '../webview/chatWebviewProvider';
 export class ChatService {
     private readonly maxTokens = 8192;
     private readonly temperature = 0.7;
-    private static readonly API_KEY_SECRET = 'codescribe.gemini.apiKey';
     
     constructor(private readonly context?: vscode.ExtensionContext) {}
 
@@ -52,7 +51,7 @@ export class ChatService {
             throw new Error(`${provider} API key not configured. Please run "CodeScribe: Configure API Key" command first.`);
         }
 
-        const prompt = this._buildPrompt(message, mode, context, previousMessages);
+        const prompt = this._buildPrompt(message, context, previousMessages);
 
         try {
             return await this.executeProviderQuery(provider, prompt, apiKey);
@@ -91,7 +90,7 @@ export class ChatService {
             return;
         }
 
-        const prompt = this._buildPrompt(message, mode, context, previousMessages);
+        const prompt = this._buildPrompt(message, context, previousMessages);
 
         try {
             await this.executeProviderStreamQuery(provider, prompt, apiKey, onToken, onComplete, onError);
@@ -241,20 +240,15 @@ export class ChatService {
             
             response.data.on('data', (chunk: Buffer) => {
                 const chunkStr = chunk.toString();
-                console.log('Raw Gemini chunk received:', chunkStr);
                 buffer += chunkStr;
                 
                 // Gemini streams an array of JSON objects, split by lines
                 const lines = buffer.split('\n');
                 buffer = lines.pop() || ''; // Keep incomplete line in buffer
                 
-                console.log('Processing lines:', lines);
-                
                 for (const line of lines) {
                     const trimmedLine = line.trim();
-                    console.log('Processing line:', trimmedLine);
                     if (!trimmedLine || trimmedLine === '[' || trimmedLine === ']' || trimmedLine === ',') {
-                        console.log('Skipping line:', trimmedLine);
                         continue;
                     }
                     
@@ -283,18 +277,16 @@ export class ChatService {
                                     .replace(/\\"/g, '"')
                                     .replace(/\\\\/g, '\\');
                                     
-                                console.log('Gemini token received:', text);
                                 onToken(text);
                             }
                         } catch (parseError) {
-                            console.warn('Failed to extract text from Gemini line:', jsonString, parseError);
+            
                         }
                     }
                 }
             });
 
             response.data.on('end', () => {
-                console.log('Gemini stream ended');
                 onComplete?.();
             });
 
@@ -357,7 +349,7 @@ export class ChatService {
         try {
             // Check if this is a GPT-5 model and warn about potential availability issues
             if (this.isGPT5Model(model)) {
-                console.warn(`Attempting to use GPT-5 model: ${model}. This model may not be available for all accounts.`);
+
             }
 
             const requestBody = {
@@ -375,9 +367,6 @@ export class ChatService {
                     }
                 )
             };
-
-            console.log('OpenAI request body:', JSON.stringify(requestBody, null, 2));
-            console.log('OpenAI API key present:', !!apiKey);
 
             const response = await axios.post(
                 'https://api.openai.com/v1/chat/completions',
@@ -412,7 +401,7 @@ export class ChatService {
                                 onToken(content);
                             }
                         } catch (parseError) {
-                            console.warn('Failed to parse OpenAI stream chunk:', parseError);
+
                         }
                     }
                 }
@@ -456,8 +445,6 @@ export class ChatService {
                 // Check if this is a GPT-5 streaming verification error
                 // We can see from the console log that this is the specific error we're looking for
                 if (error.response.status === 400 && this.isGPT5Model(model)) {
-                    
-                    console.log(`GPT-5 streaming not available, falling back to non-streaming mode for ${model}`);
                     
                     // Fallback to non-streaming mode for GPT-5 models
                     try {
@@ -570,7 +557,7 @@ export class ChatService {
                                 return;
                             }
                         } catch (parseError) {
-                            console.warn('Failed to parse Claude stream chunk:', parseError);
+
                         }
                     }
                 }
@@ -630,7 +617,6 @@ export class ChatService {
 
     private _buildPrompt(
         message: string,
-        mode: 'code',
         context: ChatContext[],
         previousMessages: ChatMessage[]
     ): string {

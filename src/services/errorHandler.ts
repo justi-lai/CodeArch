@@ -44,9 +44,13 @@ export class ErrorHandler {
 
         if (errorMessage.includes('rate limit')) {
             await vscode.window.showWarningMessage(
-                'CodeScribe: API rate limit exceeded. Please wait a moment before trying again.',
-                'Retry in 1 minute'
-            );
+                'CodeScribe: API rate limit exceeded. Please wait a moment before trying again, or switch to a different AI provider.',
+                'Switch AI Provider', 'Retry in 1 minute'
+            ).then(selection => {
+                if (selection === 'Switch AI Provider') {
+                    vscode.commands.executeCommand('codescribe.selectModel');
+                }
+            });
             return;
         }
 

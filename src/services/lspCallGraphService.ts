@@ -335,7 +335,6 @@ export class LSPCallGraphService {
             const structure = await astService.analyzeCode(
                 content, 
                 document.languageId, 
-                document.fileName, 
                 startLine, 
                 endLine
             );

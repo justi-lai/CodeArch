@@ -3,7 +3,6 @@ import { ChatService } from '../services/chatService';
 import { ApiKeyManager } from '../services/apiKeyManager';
 import { CodeScribeWebviewProvider } from './codescribeWebviewProvider';
 import { GitAnalysisEngine } from '../services/gitAnalysisEngine';
-import { GitAnalysisResult } from '../types';
 
 export interface ChatContext {
     id: string;
@@ -29,7 +28,6 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'codescribe.chatView';
     private _view?: vscode.WebviewView;
     private _chatService: ChatService;
-    private _gitAnalysisEngine: GitAnalysisEngine;
     private _context: ChatContext[] = [];
     private _messages: ChatMessage[] = [];
     private _currentMode: 'code' = 'code';
@@ -43,12 +41,11 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         private readonly _extensionContext?: vscode.ExtensionContext
     ) {
         this._chatService = new ChatService(this._extensionContext);
-        this._gitAnalysisEngine = new GitAnalysisEngine();
     }
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
+        _context: vscode.WebviewViewResolveContext,
         _token: vscode.CancellationToken,
     ) {
         this._view = webviewView;
@@ -205,7 +202,6 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                 apiKey,
                 (token: string) => {
                     // Update the response message with new token
-                    console.log('Token received in webview:', token);
                     responseMessage.content += token;
                     this._throttledUpdateMessages();
                 },
@@ -215,7 +211,6 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                         clearTimeout(this._updateThrottleTimeout);
                     }
                     this._updateMessagesOnly();
-                    console.log('Streaming complete. Final content:', responseMessage.content);
                 },
                 (error: Error) => {
                     // Handle streaming error
@@ -300,7 +295,6 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         }
 
         const selectedText = editor.document.getText(editor.selection);
-        console.log('Adding selection context:', selectedText.length, 'characters');
         await this.addCodeContext(
             selectedText,
             editor.document.uri.fsPath,
@@ -318,7 +312,6 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         }
 
         const fileContent = editor.document.getText();
-        console.log('Adding file context:', editor.document.uri.fsPath, fileContent.length, 'characters');
         await this.addCodeContext(fileContent, editor.document.uri.fsPath);
         vscode.window.showInformationMessage(`Added file context: ${editor.document.fileName} (${fileContent.length} characters)`);
     }
@@ -378,7 +371,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         });
     }
 
-    private _addCommitDiff(commitId: string, commitTitle: string, diff: string) {
+    private _addCommitDiff(_commitId: string, commitTitle: string, diff: string) {
         // Add the selected commit diff as context
         const context: ChatContext = {
             id: this._generateId(),
@@ -392,84 +385,6 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         this._updateContextOnly();
     }
 
-
-
-    private async _ensureCurrentAnalysisContext() {
-        // Get the latest analysis from the main CodeScribe provider
-        const currentResults = this._codeScribeProvider?.getCurrentResults();
-        const selectedText = this._codeScribeProvider?.getSelectedText() || '';
-        
-        // Check if we already have the current analysis context
-        const hasAnalysisContext = this._context.some(ctx => 
-            ctx.type === 'analysis' && ctx.title === 'CodeScribe Analysis'
-        );
-        
-        const hasCurrentCodeContext = this._context.some(ctx =>
-            ctx.type === 'code' && ctx.content === selectedText && selectedText.length > 0
-        );
-
-        // Add analysis summary if available
-        if (currentResults && !hasAnalysisContext) {
-            console.log('Auto-adding analysis context:', currentResults.summary.length, 'characters');
-            this.addAnalysisContext(currentResults.summary, 'CodeScribe Analysis');
-        }
-        
-        if (selectedText && !hasCurrentCodeContext) {
-            // Add the analyzed code block automatically
-            let startLine: number | undefined;
-            let endLine: number | undefined;
-            
-            if (currentResults?.lineRange) {
-                const match = currentResults.lineRange.match(/(\d+)-(\d+)/);
-                if (match) {
-                    startLine = parseInt(match[1]);
-                    endLine = parseInt(match[2]);
-                }
-            }
-            
-            console.log('Auto-adding analyzed code context:', selectedText.length, 'characters');
-            this.addCodeContext(
-                selectedText,
-                currentResults?.filePath,
-                startLine,
-                endLine
-            );
-        } else if (!selectedText && !hasCurrentCodeContext) {
-            // No analyzed text, fall back to current selection or active file
-            const editor = vscode.window.activeTextEditor;
-            if (editor && !editor.selection.isEmpty) {
-                // Add current selection
-                const currentSelection = editor.document.getText(editor.selection);
-                const hasCurrentSelection = this._context.some(ctx =>
-                    ctx.type === 'code' && ctx.content === currentSelection
-                );
-                
-                if (!hasCurrentSelection) {
-                    console.log('Auto-adding current selection as context:', currentSelection.length, 'characters');
-                    this.addCodeContext(
-                        currentSelection,
-                        editor.document.uri.fsPath,
-                        editor.selection.start.line + 1,
-                        editor.selection.end.line + 1
-                    );
-                }
-            } else if (editor) {
-                // Add current file if no selection and no analyzed text
-                const fileContent = editor.document.getText();
-                const hasCurrentFile = this._context.some(ctx =>
-                    ctx.type === 'code' && ctx.filePath === editor.document.uri.fsPath && ctx.content === fileContent
-                );
-                
-                if (!hasCurrentFile) {
-                    console.log('Auto-adding current file as context:', fileContent.length, 'characters');
-                    this.addCodeContext(fileContent, editor.document.uri.fsPath);
-                }
-            }
-        }
-        
-        // Update the webview to show the new context
-        this._updateWebview();
-    }
 
     private async _addCurrentAnalysis() {
         // Get the latest analysis from the main CodeScribe provider
@@ -490,7 +405,6 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         }
 
         // Only add the analysis summary (code is auto-added on send)
-        console.log('Adding analysis context:', currentResults.summary.length, 'characters');
         await this.addAnalysisContext(currentResults.summary, 'CodeScribe Analysis');
         
         vscode.window.showInformationMessage(

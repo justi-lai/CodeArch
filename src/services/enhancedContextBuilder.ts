@@ -57,7 +57,7 @@ export class EnhancedContextBuilder {
 
             // Run AST and LSP analysis in parallel
             const [astStructure, lspContext] = await Promise.all([
-                this.astService.analyzeCode(fullFileContent, language, filePath, startLine, endLine),
+                this.astService.analyzeCode(fullFileContent, language, startLine, endLine),
                 this.lspService.analyzeSymbolContext(document, startLine, endLine)
             ]);
 
@@ -144,22 +144,6 @@ export class EnhancedContextBuilder {
         evolutionQuery: string;
     } {
         return this.buildCodeAnalysisQueries(context);
-    }
-
-    private getLanguageFromExtension(filePath: string): string {
-        const ext = filePath.split('.').pop()?.toLowerCase();
-        switch (ext) {
-            case 'ts': return 'typescript';
-            case 'js': return 'javascript';
-            case 'py': return 'python';
-            case 'java': return 'java';
-            case 'cpp': case 'cc': case 'cxx': return 'cpp';
-            case 'c': return 'c';
-            case 'cs': return 'csharp';
-            case 'go': return 'go';
-            case 'rs': return 'rust';
-            default: return 'code';
-        }
     }
 
     buildCodeAnalysisQueries(context: EnhancedCodeContext): {
@@ -459,7 +443,7 @@ Use plain text values, no markdown formatting.`;
                 return document.getText(surroundingRange);
             }
         } catch (error) {
-            console.log('Could not get surrounding context:', error);
+
         }
         
         return undefined;
