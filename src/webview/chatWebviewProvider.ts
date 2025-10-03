@@ -343,7 +343,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
             const currentResults = this._codearchProvider?.getCurrentResults();
             
             if (!currentResults) {
-                vscode.window.showErrorMessage('No analysis results available. Please run codearch analysis first to see commit diffs.');
+                vscode.window.showErrorMessage('No analysis results available. Please run CodeArch analysis first to see commit diffs.');
                 return;
             }
 
@@ -408,7 +408,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         
         if (!currentResults) {
             const runAnalysis = await vscode.window.showInformationMessage(
-                'No recent analysis found. Would you like to run codearch analysis first?',
+                'No recent analysis found. Would you like to run CodeArch analysis first?',
                 'Run Analysis',
                 'Cancel'
             );
@@ -421,7 +421,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         }
 
         // Only add the analysis summary (code is auto-added on send)
-        await this.addAnalysisContext(currentResults.summary, 'codearch Analysis');
+        await this.addAnalysisContext(currentResults.summary, 'CodeArch Analysis');
         
         vscode.window.showInformationMessage(
             `Added analysis context: ${currentResults.summary.length} chars of analysis`
@@ -527,7 +527,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>codearch Chat</title>
+            <title>CodeArch Chat</title>
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@vscode/codicons@0.0.35/dist/codicon.css">
             <style>
                 ${this._getCSSStyles()}
@@ -645,7 +645,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                 <div class="capabilities-list">
                     <div class="capability-item">
                         <span class="codicon codicon-file-code"></span>
-                        <span>Add context from codearch analysis automatically</span>
+                        <span>Add context from CodeArch analysis automatically</span>
                     </div>
                     <div class="capability-item">
                         <span class="codicon codicon-add"></span>

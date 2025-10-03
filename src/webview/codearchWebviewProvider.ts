@@ -78,7 +78,7 @@ export class CodeArchWebviewProvider implements vscode.WebviewViewProvider {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>codearch Results</title>
+            <title>CodeArch Results</title>
             <style>
                 body {
                     font-family: var(--vscode-font-family);
@@ -133,7 +133,7 @@ export class CodeArchWebviewProvider implements vscode.WebviewViewProvider {
         </head>
         <body>
             <div class="welcome">
-                <h2>codearch Analysis</h2>
+                <h2>CodeArch Analysis</h2>
                 <div class="subtitle">Select code in your editor to analyze its history and evolution</div>
                 <div class="capabilities-list">
                     <div class="capability-item">
@@ -166,7 +166,7 @@ export class CodeArchWebviewProvider implements vscode.WebviewViewProvider {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>codearch Results</title>
+            <title>CodeArch Results</title>
             <style>
                 body {
                     font-family: var(--vscode-font-family);
