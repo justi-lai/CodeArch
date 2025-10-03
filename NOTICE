@@ -1,0 +1,13 @@
+CodeScribe: The Code Archeology Assistant
+Copyright 2025 Justin Lai
+
+This product includes software developed by Justin Lai.
+
+This software contains the following third-party components:
+
+- Axios (MIT License)
+- Tree-sitter (MIT License)
+- Various tree-sitter language parsers (MIT License)
+- Visual Studio Code Extension API (MIT License)
+
+For the full list of dependencies and their licenses, see package.json.

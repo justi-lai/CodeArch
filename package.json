@@ -4,15 +4,22 @@
   "description": "Automates code archeology by analyzing git history, GitHub PRs, and generating AI-powered summaries of code intent",
   "version": "1.0.0",
   "publisher": "hackrice-team",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/justi-lai/HackRice2025.git"
+  },
+  "homepage": "https://github.com/justi-lai/HackRice2025#readme",
+  "bugs": {
+    "url": "https://github.com/justi-lai/HackRice2025/issues"
   },
   "engines": {
     "vscode": "^1.74.0"
   },
   "categories": [
-    "Other"
+    "AI",
+    "Programming Languages",
+    "Education"
   ],
   "keywords": [
     "git",
@@ -20,7 +27,18 @@
     "code archaeology",
     "history",
     "ai",
-    "analysis"
+    "analysis",
+    "ai-assistant",
+    "code-analysis",
+    "git-history",
+    "code-explanation",
+    "evolution",
+    "blame",
+    "gemini",
+    "openai",
+    "claude",
+    "gpt",
+    "anthropic"
   ],
   "activationEvents": [
     "onStartupFinished"

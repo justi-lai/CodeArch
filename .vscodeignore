@@ -61,3 +61,21 @@ coverage/
 # Additional files to exclude
 test_json_response.html
 Project_Info.md
+
+# More node_modules optimizations
+node_modules/**/COPYING*
+node_modules/**/AUTHORS*
+node_modules/**/CONTRIBUTORS*
+node_modules/**/.travis.yml
+node_modules/**/.github/**
+node_modules/**/Makefile*
+node_modules/**/*.gyp
+node_modules/**/*.gypi
+node_modules/**/build/**
+node_modules/**/man/**
+node_modules/**/scripts/**
+
+# Tree-sitter specific (these are large)
+node_modules/tree-sitter-*/build/**
+node_modules/tree-sitter-*/src/**
+node_modules/tree-sitter/lib/**
