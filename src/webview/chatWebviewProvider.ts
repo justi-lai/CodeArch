@@ -21,7 +21,7 @@ export interface ChatMessage {
     role: 'user' | 'assistant';
     content: string;
     timestamp: Date;
-    mode: 'code' | 'finance';
+    mode: 'code';
     isTyping?: boolean;
 }
 
@@ -32,7 +32,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
     private _gitAnalysisEngine: GitAnalysisEngine;
     private _context: ChatContext[] = [];
     private _messages: ChatMessage[] = [];
-    private _currentMode: 'code' | 'finance' = 'code';
+    private _currentMode: 'code' = 'code';
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -69,10 +69,6 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                 switch (message.command) {
                     case 'sendMessage':
                         await this._handleSendMessage(message.content);
-                        break;
-                    case 'toggleMode':
-                        this._currentMode = message.mode;
-                        this._updateWebview();
                         break;
                     case 'addContext':
                         await this._handleContextType(message.contextType);
@@ -365,41 +361,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         this._updateWebview();
     }
 
-    private _formatGitAnalysisForFinance(analysisResult: GitAnalysisResult): string {
-        // Format git analysis data for financial compliance context
-        let content = '## Financial Audit Trail\n\n';
-        
-        if (analysisResult.commits && analysisResult.commits.length > 0) {
-            content += '### Code Change History\n';
-            analysisResult.commits.forEach((commit, index) => {
-                content += `**${index + 1}. ${commit.hash.substring(0, 7)}** - ${commit.message}\n`;
-                content += `- Author: ${commit.author}\n`;
-                content += `- Date: ${commit.date}\n`;
-                if (commit.diff) {
-                    content += `- Changes: Modified code affecting the analyzed section\n`;
-                }
-                content += '\n';
-            });
-        }
 
-        if (analysisResult.timeline && analysisResult.timeline.length > 0) {
-            content += '### Change Timeline\n';
-            analysisResult.timeline.slice(0, 5).forEach((item, index) => {
-                content += `**${index + 1}.** ${item.type === 'commit' ? 'Code Change' : 'Pull Request'} - ${item.date}\n`;
-                if (item.data && 'message' in item.data) {
-                    content += `- Description: ${(item.data as any).message}\n`;
-                }
-                content += '\n';
-            });
-        }
-
-        content += '### Compliance Notes\n';
-        content += '- All changes have been tracked through version control\n';
-        content += '- Author information is preserved for audit purposes\n';
-        content += '- Change history provides traceability for regulatory compliance\n';
-
-        return content;
-    }
 
     private async _ensureCurrentAnalysisContext() {
         // Get the latest analysis from the main CodeScribe provider
@@ -415,28 +377,9 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
             ctx.type === 'code' && ctx.content === selectedText && selectedText.length > 0
         );
 
-        // For finance mode, always ensure we have analysis data as context
-        if (this._currentMode === 'finance' && currentResults) {
-            if (!hasAnalysisContext) {
-                console.log('Auto-adding analysis context for finance mode:', currentResults.summary.length, 'characters');
-                this.addAnalysisContext(currentResults.summary, 'CodeScribe Analysis');
-            }
-
-            // Also add git analysis data for financial audit trail
-            const hasGitAnalysisContext = this._context.some(ctx => 
-                ctx.type === 'analysis' && ctx.title === 'Git Analysis Data'
-            );
-
-            if (!hasGitAnalysisContext && currentResults.analysisResult) {
-                const gitAnalysisData = this._formatGitAnalysisForFinance(currentResults.analysisResult);
-                this.addAnalysisContext(gitAnalysisData, 'Git Analysis Data');
-                console.log('Auto-adding git analysis for finance mode');
-            }
-        }
-
-        // For code mode, add analysis summary if available
-        if (this._currentMode === 'code' && currentResults && !hasAnalysisContext) {
-            console.log('Auto-adding analysis context for code mode:', currentResults.summary.length, 'characters');
+        // Add analysis summary if available
+        if (currentResults && !hasAnalysisContext) {
+            console.log('Auto-adding analysis context:', currentResults.summary.length, 'characters');
             this.addAnalysisContext(currentResults.summary, 'CodeScribe Analysis');
         }
         
@@ -610,13 +553,7 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                                 `).join('')}
                             </div>
                         </div>
-                        <div class="mode-controls">
-                            <span class="mode-label">Mode:</span>
-                            <button class="mode-btn ${this._currentMode === 'code' ? 'active' : ''}" 
-                                    onclick="toggleMode('code')">Code</button>
-                            <button class="mode-btn ${this._currentMode === 'finance' ? 'active' : ''}" 
-                                    onclick="toggleMode('finance')">Finance</button>
-                        </div>
+
                     </div>
                     <!-- Textbox with send button -->
                     <div class="input-box">
@@ -697,35 +634,6 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
         `;
     }
 
-    private _getFinanceCapabilities(): string {
-        return `
-            <div class="capability">
-                <span class="codicon codicon-graph-line"></span>
-                <span>Trading algorithm analysis</span>
-            </div>
-            <div class="capability">
-                <span class="codicon codicon-shield"></span>
-                <span>Risk management systems</span>
-            </div>
-            <div class="capability">
-                <span class="codicon codicon-law"></span>
-                <span>Regulatory compliance</span>
-            </div>
-            <div class="capability">
-                <span class="codicon codicon-pulse"></span>
-                <span>Performance optimization</span>
-            </div>
-            <div class="capability">
-                <span class="codicon codicon-history"></span>
-                <span>Audit trail analysis</span>
-            </div>
-            <div class="capability">
-                <span class="codicon codicon-search"></span>
-                <span>Financial model validation</span>
-            </div>
-        `;
-    }
-
     private _getCodeCapabilities(): string {
         return `
             <div class="capability">
@@ -751,23 +659,6 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
             <div class="capability">
                 <span class="codicon codicon-beaker"></span>
                 <span>Testing strategies</span>
-            </div>
-        `;
-    }
-
-    private _getFinanceExamples(): string {
-        return `
-            <div class="example-prompt" onclick="insertPrompt('Review this trading algorithm for potential risks')">
-                "Review this trading algorithm for potential risks"
-            </div>
-            <div class="example-prompt" onclick="insertPrompt('How can I optimize this pricing model for performance?')">
-                "How can I optimize this pricing model for performance?"
-            </div>
-            <div class="example-prompt" onclick="insertPrompt('What regulatory requirements should I consider?')">
-                "What regulatory requirements should I consider?"
-            </div>
-            <div class="example-prompt" onclick="insertPrompt('Analyze the audit trail of these recent changes')">
-                "Analyze the audit trail of these recent changes"
             </div>
         `;
     }
@@ -1151,28 +1042,6 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
                 font-size: 10px;
             }
 
-            .mode-btn {
-                background: none;
-                border: none;
-                color: var(--vscode-foreground);
-                cursor: pointer;
-                padding: 2px 6px;
-                border-radius: 3px;
-                font-size: 10px;
-                opacity: 0.6;
-                transition: opacity 0.2s;
-            }
-
-            .mode-btn.active {
-                opacity: 1;
-                background-color: var(--vscode-button-background);
-                color: var(--vscode-button-foreground);
-            }
-
-            .mode-btn:hover:not(.active) {
-                opacity: 0.8;
-            }
-
             /* Input box */
             .input-box {
                 position: relative;
@@ -1328,13 +1197,6 @@ export class ChatWebviewProvider implements vscode.WebviewViewProvider {
     private _getJavaScript(): string {
         return `
             const vscode = acquireVsCodeApi();
-
-            function toggleMode(mode) {
-                vscode.postMessage({
-                    command: 'toggleMode',
-                    mode: mode
-                });
-            }
 
             function toggleContextDropdown() {
                 const dropdown = document.getElementById('contextDropdown');

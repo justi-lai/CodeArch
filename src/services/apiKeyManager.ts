@@ -40,30 +40,6 @@ export class ApiKeyManager {
                 description: 'Experimental 2.0 model with cutting-edge features',
                 detail: 'Experimental features, may have usage limits',
                 value: 'gemini-2.0-flash-exp'
-            },
-            {
-                label: 'gemini-1.5-pro',
-                description: 'Proven capable Gemini model',
-                detail: 'Reliable choice for complex code analysis',
-                value: 'gemini-1.5-pro'
-            },
-            {
-                label: 'gemini-1.5-flash',
-                description: 'Fast and economical',
-                detail: 'Good balance of speed and quality',
-                value: 'gemini-1.5-flash'
-            },
-            {
-                label: 'gemini-1.5-flash-8b',
-                description: 'Compact and efficient model',
-                detail: 'Fastest option with reduced capabilities',
-                value: 'gemini-1.5-flash-8b'
-            },
-            {
-                label: 'gemini-pro',
-                description: 'Original Gemini Pro model',
-                detail: 'Legacy model, consider newer versions',
-                value: 'gemini-pro'
             }
         ], {
             placeHolder: 'Select your Gemini model',
@@ -119,6 +95,6 @@ export class ApiKeyManager {
 
     getModelName(): string {
         const config = vscode.workspace.getConfiguration('codescribe');
-        return config.get<string>('geminiModel', 'gemini-1.5-pro');
+        return config.get<string>('geminiModel', 'gemini-2.0-flash-exp');
     }
 }

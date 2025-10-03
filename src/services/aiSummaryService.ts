@@ -12,7 +12,7 @@ export class AiSummaryService {
         endLine?: number
     ): Promise<string> {
         const config = vscode.workspace.getConfiguration('codescribe');
-        const model = config.get<string>('geminiModel', 'gemini-1.5-pro');
+        const model = config.get<string>('geminiModel', 'gemini-2.0-flash-exp');
         
         // Validate model availability
         this.validateModel(model);
@@ -23,16 +23,17 @@ export class AiSummaryService {
     }
 
     private getMaxTokensForModel(model: string): number {
-        // Newer models like 2.5-flash use more tokens for reasoning/thinking
-        // so they need higher limits to produce actual output
+        // Set higher token limits for newer models to accommodate their capabilities
+        // Gemini 2.5 models can handle much higher output token counts
         switch (model) {
             case 'gemini-2.5-pro':
+                return 8192; // Pro model can handle large outputs
             case 'gemini-2.5-flash':
-                return 1000; // Higher limit for 2.5 models that use reasoning tokens
+                return 8192; // Flash model also supports high token counts
             case 'gemini-2.0-flash-exp':
-                return 800; // Medium-high limit for experimental 2.0 model
+                return 4096; // Experimental model with good capacity
             default:
-                return 400; // Original limit for stable 1.x models
+                return 2048; // Reasonable default for any other models
         }
     }
 
@@ -163,7 +164,7 @@ export class AiSummaryService {
             
             if (!generatedText) {
                 if (finishReason === 'MAX_TOKENS') {
-                    throw new Error(`Model ${model} hit the token limit before completing the response. The model may be using too many tokens for internal reasoning. Try switching to a stable model like gemini-1.5-pro.`);
+                    throw new Error(`Model ${model} hit the token limit before completing the response. The model may be using too many tokens for internal reasoning. Try switching to a different model or reducing the input size.`);
                 }
                 
                 throw new Error(`No response generated from Gemini API for model ${model}. Try switching to a different model.`);

@@ -3,19 +3,19 @@ import axios from 'axios';
 import { ChatContext, ChatMessage } from '../webview/chatWebviewProvider';
 
 export class ChatService {
-    private readonly maxTokens = 2000;
+    private readonly maxTokens = 8192;
     private readonly temperature = 0.7;
     private static readonly API_KEY_SECRET = 'codescribe.gemini.apiKey';
 
     async sendMessage(
         message: string,
-        mode: 'code' | 'finance',
+        mode: 'code',
         context: ChatContext[],
         previousMessages: ChatMessage[] = [],
         apiKey?: string
     ): Promise<string> {
         const config = vscode.workspace.getConfiguration('codescribe');
-        const model = config.get<string>('geminiModel', 'gemini-1.5-pro');
+        const model = config.get<string>('geminiModel', 'gemini-2.0-flash-exp');
 
         if (!apiKey || apiKey.trim() === '') {
             throw new Error('Gemini API key not configured. Please run "CodeScribe: Configure API Key" command first.');
@@ -72,17 +72,11 @@ export class ChatService {
 
     private _buildPrompt(
         message: string,
-        mode: 'code' | 'finance',
+        mode: 'code',
         context: ChatContext[],
         previousMessages: ChatMessage[]
     ): string {
-        let prompt = '';
-
-        if (mode === 'code') {
-            prompt = this._buildCodePrompt();
-        } else {
-            prompt = this._buildFinancePrompt();
-        }
+        let prompt = this._buildCodePrompt();
 
         // Add context if available
         if (context.length > 0) {
@@ -112,7 +106,7 @@ export class ChatService {
         // Add current user message
         prompt += `\n\n**CURRENT QUESTION:**\n${message}\n\n`;
 
-        prompt += this._getResponseGuidelines(mode);
+        prompt += this._getResponseGuidelines();
 
         return prompt;
     }
@@ -139,51 +133,7 @@ export class ChatService {
 - Focus on code quality and maintainability`;
     }
 
-    private _buildFinancePrompt(): string {
-        return `You are CodeScribe Financial, a specialized AI assistant for quantitative finance and trading systems. You combine deep software engineering knowledge with financial domain expertise to help with trading algorithms, risk management systems, and financial technology.
-
-**YOUR CAPABILITIES:**
-- Financial algorithm analysis and optimization
-- Trading system architecture guidance
-- Risk management code review
-- Market data processing optimization
-- Regulatory compliance guidance (SOX, Basel III, MiFID II, etc.)
-- Financial model validation
-- Performance optimization for trading systems
-- Debugging financial calculations
-- Backtesting and simulation guidance
-- Market microstructure insights
-- Code audit trail analysis for compliance
-- Change impact assessment for financial systems
-
-**YOUR PERSONALITY:**
-- Expert in both finance and technology
-- Risk-aware and compliance-focused
-- Precise with financial terminology
-- Practical guidance for production trading systems
-- Understands the critical nature of financial software
-- Thorough in analyzing change history for risk assessment
-
-**ANALYSIS DATA USAGE:**
-When CodeScribe Analysis and Git Analysis Data are provided as context:
-- Use the code analysis to understand current functionality
-- Leverage git history for change impact assessment
-- Identify potential compliance and audit concerns
-- Assess risk implications of recent changes
-- Suggest monitoring and validation strategies
-- Consider regulatory reporting requirements
-
-**IMPORTANT CONSIDERATIONS:**
-- Financial code errors can result in significant monetary losses
-- Regulatory compliance is mandatory
-- Performance and latency are critical in trading systems
-- Risk management is paramount
-- Audit trails and documentation are essential
-- Change history analysis is crucial for compliance validation
-- All modifications must be traceable and justified`;
-    }
-
-    private _getResponseGuidelines(mode: 'code' | 'finance'): string {
+    private _getResponseGuidelines(): string {
         const baseGuidelines = `
 **RESPONSE GUIDELINES:**
 - Provide clear, actionable answers
@@ -192,20 +142,6 @@ When CodeScribe Analysis and Git Analysis Data are provided as context:
 - Ask clarifying questions if the request is ambiguous
 - Suggest next steps or follow-up actions
 - Keep responses concise but comprehensive`;
-
-        if (mode === 'finance') {
-            return baseGuidelines + `
-- Consider financial risk implications of all suggestions
-- Mention relevant regulatory requirements (SOX, Basel III, MiFID II, etc.)
-- Highlight performance and compliance concerns
-- Suggest appropriate testing strategies for financial code
-- Consider market impact and operational risk
-- When analysis data is available, use it to assess change impact
-- Provide audit trail recommendations
-- Consider regulatory reporting implications
-- Suggest validation and monitoring strategies
-- Address compliance documentation requirements`;
-        }
 
         return baseGuidelines;
     }

@@ -5,7 +5,6 @@ import { CodeScribeWebviewProvider } from './webview/codescribeWebviewProvider';
 import { ChatWebviewProvider } from './webview/chatWebviewProvider';
 import { GitAnalysisEngine } from './services/gitAnalysisEngine';
 import { AiSummaryService } from './services/aiSummaryService';
-import { FinancialAnalysisService } from './services/financialAnalysisService';
 import { ErrorHandler, UserFeedback } from './services/errorHandler';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -16,7 +15,6 @@ export function activate(context: vscode.ExtensionContext) {
     const apiKeyManager = new ApiKeyManager(context);
     const gitAnalysisEngine = new GitAnalysisEngine();
     const aiSummaryService = new AiSummaryService();
-    const financialAnalysisService = new FinancialAnalysisService();
     const webviewProvider = new CodeScribeWebviewProvider(context.extensionUri);
     const chatWebviewProvider = new ChatWebviewProvider(context.extensionUri, apiKeyManager, webviewProvider);
 
@@ -217,31 +215,22 @@ export function activate(context: vscode.ExtensionContext) {
 
     const reanalyzeWithModeCommand = vscode.commands.registerCommand(
         'codescribe.reanalyzeWithMode',
-        async (args: { results: any, financialMode: boolean }) => {
+        async (args: { results: any }) => {
             try {
-                const { results, financialMode } = args;
+                const { results } = args;
                 
                 // Get API key
                 const apiKey = await apiKeyManager.getApiKey();
                 
-                // Generate new summary based on mode
-                const summary = financialMode 
-                    ? await financialAnalysisService.generateFinancialSummary(
-                        results.analysisResult,
-                        results.selectedText,
-                        apiKey,
-                        results.filePath,
-                        parseInt(results.lineRange.split('-')[0]),
-                        parseInt(results.lineRange.split('-')[1])
-                    )
-                    : await aiSummaryService.generateSummary(
-                        results.analysisResult,
-                        results.selectedText,
-                        apiKey,
-                        results.filePath,
-                        parseInt(results.lineRange.split('-')[0]),
-                        parseInt(results.lineRange.split('-')[1])
-                    );
+                // Generate new summary using standard analysis
+                const summary = await aiSummaryService.generateSummary(
+                    results.analysisResult,
+                    results.selectedText,
+                    apiKey,
+                    results.filePath,
+                    parseInt(results.lineRange.split('-')[0]),
+                    parseInt(results.lineRange.split('-')[1])
+                );
 
                 // Update webview with new summary
                 await webviewProvider.showResults({
@@ -250,7 +239,7 @@ export function activate(context: vscode.ExtensionContext) {
                 });
 
             } catch (error) {
-                console.error('Error re-analyzing with mode:', error);
+                console.error('Error re-analyzing:', error);
                 await ErrorHandler.handleError(
                     error instanceof Error ? error : new Error('Unknown error occurred'),
                     'reanalyzeWithMode'

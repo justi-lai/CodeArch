@@ -1,17 +1,13 @@
 import * as vscode from 'vscode';
 import { CodeScribeResults } from '../types';
-import { FinancialRiskDetector } from '../services/financialRiskDetector';
 
 export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'codescribe.resultsView';
     private _view?: vscode.WebviewView;
     private _selectedText: string = '';
     private _currentResults?: CodeScribeResults;
-    private _isFinancialMode: boolean = false;
-    private _riskDetector: FinancialRiskDetector;
 
     constructor(private readonly _extensionUri: vscode.Uri) {
-        this._riskDetector = new FinancialRiskDetector();
     }
 
     public resolveWebviewView(
@@ -30,19 +26,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.onDidReceiveMessage(
             message => {
                 switch (message.command) {
-                    case 'toggleAnalysisMode':
-                        this._isFinancialMode = message.isFinancialMode;
-                        // Don't regenerate - just store the state for future use
-                        break;
-                    case 'reanalyzeWithMode':
-                        if (this._currentResults) {
-                            // Trigger reanalysis with current results
-                            vscode.commands.executeCommand('codescribe.reanalyzeWithMode', {
-                                results: this._currentResults,
-                                financialMode: message.financialMode
-                            });
-                        }
-                        break;
+
                 }
             }
         );
@@ -58,38 +42,19 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
         return this._selectedText;
     }
 
-    public async showResults(results: CodeScribeResults, financialSummary?: string) {
+    public async showResults(results: CodeScribeResults) {
         if (this._view) {
             this._selectedText = results.selectedText;
             this._currentResults = results;
             
-            // Generate financial summary if not provided
-            if (!financialSummary) {
-                financialSummary = this._generateQuickFinancialSummary(results.summary, results);
-            }
-            
-            this._view.webview.html = this._getResultsHtml(results, financialSummary);
+            this._view.webview.html = this._getResultsHtml(results);
             
             // Set context to show the view
             await vscode.commands.executeCommand('setContext', 'codescribe.hasResults', true);
         }
     }
 
-    private async _regenerateAnalysis() {
-        if (!this._currentResults) return;
-        
-        // Trigger re-analysis with financial mode
-        vscode.commands.executeCommand('codescribe.reanalyzeWithMode', {
-            results: this._currentResults,
-            financialMode: this._isFinancialMode
-        });
-    }
 
-    private _generateQuickFinancialSummary(originalSummary: string, results: CodeScribeResults): string {
-        // Generate a quick financial analysis based on the original summary
-        // This is used when we don't have a full financial analysis from the AI service
-        return this._convertToFinancialAnalysis(originalSummary, results);
-    }
 
     private _getInitialHtml(): string {
         return `<!DOCTYPE html>
@@ -177,7 +142,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
         </html>`;
     }
 
-    private _getResultsHtml(results: CodeScribeResults, financialSummary?: string): string {
+    private _getResultsHtml(results: CodeScribeResults): string {
         const timelineHtml = this._generateTimelineHtml(results.analysisResult.timeline);
         
         return `<!DOCTYPE html>
@@ -235,143 +200,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
                     flex-wrap: wrap;
                 }
                 
-                .header-controls {
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                    flex-shrink: 0;
-                }
-                
-                .analysis-mode-toggle {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    margin-top: 4px;
-                    flex-shrink: 0;
-                }
-                
-                .toggle-switch {
-                    position: relative;
-                    width: 44px;
-                    height: 24px;
-                    background: var(--vscode-button-secondaryBackground);
-                    border-radius: 12px;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    border: 1px solid var(--vscode-panel-border);
-                }
-                
-                .toggle-switch.financial-mode {
-                    background: var(--vscode-charts-orange);
-                }
-                
-                .toggle-slider {
-                    position: absolute;
-                    top: 2px;
-                    left: 2px;
-                    width: 18px;
-                    height: 18px;
-                    background: var(--vscode-button-foreground);
-                    border-radius: 50%;
-                    transition: transform 0.3s ease;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-                }
-                
-                .toggle-switch.financial-mode .toggle-slider {
-                    transform: translateX(20px);
-                }
-                
-                .toggle-label {
-                    font-size: 0.85em;
-                    color: var(--vscode-descriptionForeground);
-                    user-select: none;
-                    cursor: pointer;
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                }
-                
-                .toggle-label.active {
-                    color: var(--vscode-charts-orange);
-                    font-weight: 600;
-                }
-                
-                .mode-icon {
-                    font-size: 0.9em;
-                }
-                
-                /* Financial Risk Indicators */
-                .financial-risk-indicator {
-                    margin-bottom: 16px;
-                    padding: 12px;
-                    border-radius: 6px;
-                    border-left: 4px solid;
-                }
-                
-                .financial-risk-indicator.risk-critical {
-                    background: rgba(220, 53, 69, 0.1);
-                    border-left-color: #dc3545;
-                }
-                
-                .financial-risk-indicator.risk-high {
-                    background: rgba(255, 136, 0, 0.1);
-                    border-left-color: #ff8800;
-                }
-                
-                .financial-risk-indicator.risk-medium {
-                    background: rgba(255, 193, 7, 0.1);
-                    border-left-color: #ffc107;
-                }
-                
-                .financial-risk-indicator.risk-low {
-                    background: rgba(40, 167, 69, 0.1);
-                    border-left-color: #28a745;
-                }
-                
-                .risk-badge {
-                    font-weight: 600;
-                    font-size: 0.9em;
-                    margin-bottom: 4px;
-                }
-                
-                .risk-critical .risk-badge {
-                    color: #dc3545;
-                }
-                
-                .risk-high .risk-badge {
-                    color: #ff8800;
-                }
-                
-                .risk-medium .risk-badge {
-                    color: #ffc107;
-                }
-                
-                .risk-low .risk-badge {
-                    color: #28a745;
-                }
-                
-                .risk-reason {
-                    font-size: 0.85em;
-                    color: var(--vscode-descriptionForeground);
-                }
-                
-                .algorithm-badge {
-                    background: var(--vscode-button-background);
-                    color: var(--vscode-button-foreground);
-                    padding: 2px 6px;
-                    border-radius: 3px;
-                    font-size: 0.75em;
-                    font-weight: 500;
-                    margin: 4px 0;
-                    display: inline-block;
-                }
-                
-                .market-impact {
-                    font-size: 0.8em;
-                    color: var(--vscode-descriptionForeground);
-                    margin-top: 2px;
-                    font-style: italic;
-                }
+
                 
                 .summary {
                     background: transparent;
@@ -790,36 +619,14 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
                             <strong>Lines:</strong> ${results.lineRange}
                         </div>
                         
-                        <div class="header-controls">
-                            <div class="analysis-mode-toggle">
-                                <div class="toggle-label" onclick="toggleAnalysisMode()">
-                                    <span class="mode-icon">🔍</span>
-                                    <span>SWE</span>
-                                </div>
-                                <div class="toggle-switch" onclick="toggleAnalysisMode()" id="modeToggle">
-                                    <div class="toggle-slider"></div>
-                                </div>
-                                <div class="toggle-label" onclick="toggleAnalysisMode()">
-                                    <span class="mode-icon">💰</span>
-                                    <span>Financial</span>
-                                </div>
-                            </div>
-                        </div>
+
                     </div>
                 </div>
                 
                 <div class="summary">
                     <h3>Code Analysis</h3>
                     <div class="summary-content">
-                        <!-- Standard SWE Analysis (default) -->
-                        <div class="standard-section">
-                            ${this._formatSummary(results.summary)}
-                        </div>
-                        
-                        <!-- Financial Analysis (hidden by default) -->
-                        <div class="financial-section" style="display: none;">
-                            ${financialSummary ? this._formatFinancialSummary(financialSummary, results) : this._formatFinancialSummary(results.summary, results)}
-                        </div>
+                        ${this._formatSummary(results.summary)}
                     </div>
                 </div>
                 
@@ -830,8 +637,6 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
             </div>
             
             <script>
-                let isFinancialMode = false;
-                
                 function toggleItem(element) {
                     const content = element.nextElementSibling;
                     const icon = element.querySelector('.expand-icon');
@@ -844,131 +649,8 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
                         element.classList.add('expanded');
                     }
                 }
-                
-                function showLoadingState(message) {
-                    const summaryContent = document.querySelector('.summary .content');
-                    if (summaryContent) {
-                        const loadingDiv = document.createElement('div');
-                        loadingDiv.className = 'loading-state';
-                        loadingDiv.style.cssText = 
-                            'padding: 20px; ' +
-                            'text-align: center; ' +
-                            'color: var(--vscode-descriptionForeground); ' +
-                            'font-style: italic; ' +
-                            'background: var(--vscode-textBlockQuote-background); ' +
-                            'border-radius: 4px; ' +
-                            'margin: 10px 0;';
-                        loadingDiv.innerHTML = message;
-                        
-                        // Remove any existing loading states
-                        const existingLoading = summaryContent.querySelector('.loading-state');
-                        if (existingLoading) {
-                            existingLoading.remove();
-                        }
-                        
-                        // Add loading state at top
-                        summaryContent.insertBefore(loadingDiv, summaryContent.firstChild);
-                        
-                        // Remove loading state after 3 seconds
-                        setTimeout(() => {
-                            if (loadingDiv.parentNode) {
-                                loadingDiv.remove();
-                            }
-                        }, 3000);
-                    }
-                }
-                
-                function toggleAnalysisMode() {
-                    isFinancialMode = !isFinancialMode;
-                    console.log('Toggle clicked, new mode:', isFinancialMode ? 'Financial' : 'SWE');
-                    
-                    const toggle = document.getElementById('modeToggle');
-                    const sweLabel = document.querySelector('.toggle-label:first-of-type');
-                    const financialLabel = document.querySelector('.toggle-label:last-of-type');
-                    const analysisTitle = document.querySelector('.summary h3');
-                    
-                    if (isFinancialMode) {
-                        toggle.classList.add('financial-mode');
-                        sweLabel.classList.remove('active');
-                        financialLabel.classList.add('active');
-                        analysisTitle.textContent = 'Financial Risk Analysis';
-                        
-                        // Show loading state
-                        showLoadingState('🔄 Analyzing financial risk patterns...');
-                        
-                        // Show financial-specific content
-                        showFinancialAnalysis();
-                        
-                        // Notify extension to generate real financial analysis
-                        vscode.postMessage({
-                            command: 'reanalyzeWithMode',
-                            financialMode: true
-                        });
-                    } else {
-                        toggle.classList.remove('financial-mode');
-                        financialLabel.classList.remove('active');
-                        sweLabel.classList.add('active');
-                        analysisTitle.textContent = 'Code Analysis';
-                        
-                        // Show loading state
-                        showLoadingState('🔄 Generating standard analysis...');
-                        
-                        // Show standard SWE analysis
-                        showStandardAnalysis();
-                        
-                        // Notify extension to generate standard analysis
-                        vscode.postMessage({
-                            command: 'reanalyzeWithMode',
-                            financialMode: false
-                        });
-                    }
-                    
-                    // Don't notify extension - just handle UI toggle locally
-                    // This prevents the automatic reset issue
-                }
-                
-                function showFinancialAnalysis() {
-                    console.log('Showing financial analysis');
-                    const financialSections = document.querySelectorAll('.financial-section');
-                    const standardSections = document.querySelectorAll('.standard-section');
-                    
-                    financialSections.forEach(section => {
-                        section.style.display = 'block';
-                        console.log('Showing financial section');
-                    });
-                    standardSections.forEach(section => {
-                        section.style.display = 'none';
-                        console.log('Hiding standard section');
-                    });
-                }
-                
-                function showStandardAnalysis() {
-                    console.log('Showing standard analysis');
-                    const financialSections = document.querySelectorAll('.financial-section');
-                    const standardSections = document.querySelectorAll('.standard-section');
-                    
-                    financialSections.forEach(section => {
-                        section.style.display = 'none';
-                        console.log('Hiding financial section');
-                    });
-                    standardSections.forEach(section => {
-                        section.style.display = 'block';
-                        console.log('Showing standard section');
-                    });
-                }
-                
-                // Initialize with SWE mode active
-                document.addEventListener('DOMContentLoaded', function() {
-                    console.log('DOM loaded, initializing SWE mode');
-                    const sweLabel = document.querySelector('.toggle-label:first-of-type');
-                    if (sweLabel) {
-                        sweLabel.classList.add('active');
-                        console.log('SWE label activated');
-                    }
-                    
-                    // Ensure standard analysis is visible
-                    showStandardAnalysis();
-                });
+
+
             </script>
         </body>
         </html>`;
@@ -1145,172 +827,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
         return formatted;
     }
 
-    private _formatFinancialSummary(summary: string, results: CodeScribeResults): string {
-        // Convert standard analysis to financial context
-        let financialSummary = this._convertToFinancialAnalysis(summary, results);
-        
-        // Format as HTML with financial-specific styling
-        let formatted = this._escapeHtml(financialSummary);
-        
-        // Convert markdown-style bold to HTML
-        formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        
-        // Handle financial headers
-        formatted = formatted.replace(/^### (.*$)/gm, '<h4>$1</h4>');
-        formatted = formatted.replace(/^## (.*$)/gm, '<h4>$1</h4>');
-        
-        // Handle bullet points
-        formatted = formatted.replace(/^- (.*$)/gm, '<li>$1</li>');
-        formatted = formatted.replace(/(<li>.*<\/li>\s*)+/g, '<ul>$&</ul>');
-        
-        // Add financial risk indicators
-        formatted = this._addFinancialRiskIndicators(formatted, results);
-        
-        // Convert line breaks to paragraphs
-        formatted = formatted.replace(/\n\s*\n/g, '</p><p>');
-        formatted = '<p>' + formatted + '</p>';
-        
-        // Clean up structure
-        formatted = formatted.replace(/<p>\s*<\/p>/g, '');
-        formatted = formatted.replace(/<p>\s*(<h4>)/g, '$1');
-        formatted = formatted.replace(/(<\/h4>)\s*<\/p>/g, '$1');
-        
-        return formatted;
-    }
 
-    private _convertToFinancialAnalysis(summary: string, results: CodeScribeResults): string {
-        // Use advanced financial risk detector
-        const riskAssessment = this._riskDetector.assessRisk(results.selectedText);
-        const quickRisk = this._riskDetector.getQuickRiskLevel(results.selectedText);
-        
-        let algorithmInfo = 'General financial code';
-        if (riskAssessment.algorithmType) {
-            algorithmInfo = `${riskAssessment.algorithmType.category} - ${riskAssessment.algorithmType.specificType}`;
-        }
-        
-        return `
-**ALGORITHM CLASSIFICATION:**
-- **Algorithm Type:** ${algorithmInfo}
-
-**RISK ASSESSMENT:**
-- **Risk Level:** ${riskAssessment.level} (Score: ${riskAssessment.score}/100)
-- **Market Impact:** ${riskAssessment.marketImpact.level} - ${riskAssessment.marketImpact.description}
-- **Key Risk Factors:** ${riskAssessment.reasons.join('; ')}
-
-**COMPLIANCE VALIDATION:**
-${riskAssessment.complianceFlags.length > 0 ? 
-    riskAssessment.complianceFlags.map(flag => `- **${flag.regulation}:** ${flag.description} (${flag.severity})`).join('\n') :
-    '- **General Compliance:** Standard financial code practices apply'
-}
-
-**AUDIT TRAIL:**
-${this._extractAuditTrail(results)}
-
-**RECOMMENDATIONS:**
-${riskAssessment.recommendations.map(rec => `- ${rec}`).join('\n')}
-
-**ADVANCED INSIGHTS:**
-- **Affected Markets:** ${riskAssessment.marketImpact.affectedMarkets.join(', ') || 'None specified'}
-- **Potential Loss:** ${riskAssessment.marketImpact.potentialLoss}
-- **Change Approval:** Required for ${riskAssessment.level.toLowerCase()} risk modifications
-        `;
-    }
-
-    private _assessFinancialRisk(code: string): {level: string, reason: string} {
-        const riskKeywords = {
-            'CRITICAL': ['limit', 'threshold', 'stop', 'loss', 'margin', 'leverage'],
-            'HIGH': ['risk', 'var', 'exposure', 'portfolio', 'position', 'trade'],
-            'MEDIUM': ['price', 'calculation', 'model', 'validation', 'check'],
-            'LOW': ['display', 'format', 'log', 'debug', 'util']
-        };
-        
-        const lowerCode = code.toLowerCase();
-        
-        for (const [level, keywords] of Object.entries(riskKeywords)) {
-            if (keywords.some(keyword => lowerCode.includes(keyword))) {
-                return {
-                    level,
-                    reason: `Contains ${level.toLowerCase()}-risk financial keywords`
-                };
-            }
-        }
-        
-        return { level: 'LOW', reason: 'No high-risk financial keywords detected' };
-    }
-
-    private _assessComplianceImpact(code: string): string {
-        const complianceKeywords = ['sox', 'basel', 'mifid', 'audit', 'compliance', 'regulatory'];
-        const lowerCode = code.toLowerCase();
-        
-        if (complianceKeywords.some(keyword => lowerCode.includes(keyword))) {
-            return 'Direct regulatory compliance impact - requires documentation';
-        }
-        
-        return 'Standard compliance requirements apply';
-    }
-
-    private _analyzeCostImpact(code: string): string {
-        const costIndicators = ['cache', 'memory', 'cpu', 'optimization', 'performance', 'latency'];
-        const lowerCode = code.toLowerCase();
-        
-        if (costIndicators.some(indicator => lowerCode.includes(indicator))) {
-            return 'Performance implications - monitor computational costs';
-        }
-        
-        return 'Minimal computational cost impact';
-    }
-
-    private _extractAuditTrail(results: CodeScribeResults): string {
-        if (results.analysisResult.commits.length > 0) {
-            const latestCommit = results.analysisResult.commits[0];
-            return `Latest modification by ${latestCommit.author} - ${latestCommit.message}`;
-        }
-        return 'No commit history available for audit trail';
-    }
-
-    private _extractRiskMitigation(summary: string): string {
-        const evolutionMatch = summary.match(/\*\*EVOLUTION & DECISIONS:\*\*(.*?)(?=\*\*|$)/s);
-        if (evolutionMatch) {
-            return evolutionMatch[1].trim();
-        }
-        return 'Risk mitigation steps documented in commit history';
-    }
-
-    private _getFinancialRecommendations(riskLevel: {level: string, reason: string}): string {
-        switch (riskLevel.level) {
-            case 'CRITICAL':
-                return 'Immediate review required - halt deployment until validated';
-            case 'HIGH':
-                return 'Senior approval required before production deployment';
-            case 'MEDIUM':
-                return 'Standard code review and testing protocols apply';
-            default:
-                return 'Follow standard development practices';
-        }
-    }
-
-    private _addFinancialRiskIndicators(formatted: string, results: CodeScribeResults): string {
-        const riskAssessment = this._riskDetector.assessRisk(results.selectedText);
-        const quickRisk = this._riskDetector.getQuickRiskLevel(results.selectedText);
-        
-        let riskClass = 'risk-low';
-        if (riskAssessment.level === 'CRITICAL') riskClass = 'risk-critical';
-        else if (riskAssessment.level === 'HIGH') riskClass = 'risk-high';
-        else if (riskAssessment.level === 'MEDIUM') riskClass = 'risk-medium';
-        
-        let algorithmBadge = '';
-        if (riskAssessment.algorithmType) {
-            algorithmBadge = `<div class="algorithm-badge">${riskAssessment.algorithmType.category}</div>`;
-        }
-        
-        return `<div class="financial-risk-indicator ${riskClass}">
-                    <div class="risk-badge">${quickRisk.icon} ${riskAssessment.level} RISK (${riskAssessment.score}/100)</div>
-                    ${algorithmBadge}
-                    <div class="risk-reason">${riskAssessment.reasons.join('; ')}</div>
-                    <div class="market-impact">Market Impact: ${riskAssessment.marketImpact.level}</div>
-                </div>
-                ${formatted}`;
-    }
 
     private _formatGitDiff(diff: string, filename: string, selectedText: string = ''): string {
         if (!diff || diff.trim().length === 0) {

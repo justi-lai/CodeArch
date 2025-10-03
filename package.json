@@ -97,49 +97,12 @@
           "enum": [
             "gemini-2.5-pro",
             "gemini-2.5-flash",
-            "gemini-2.0-flash-exp",
-            "gemini-1.5-pro",
-            "gemini-1.5-flash",
-            "gemini-1.5-flash-8b",
-            "gemini-pro"
+            "gemini-2.0-flash-exp"
           ],
-          "default": "gemini-1.5-pro",
-          "description": "Gemini model to use for generating summaries. Newer models like gemini-2.5-pro and gemini-2.0-flash-exp offer improved performance and capabilities."
-        },
-        "codescribe.financialMode": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable financial auditing features for quantitative trading environments. When enabled, analysis includes risk assessment, compliance checking, and cost analysis."
-        },
-        "codescribe.riskThreshold": {
-          "type": "string",
-          "enum": [
-            "LOW",
-            "MEDIUM",
-            "HIGH",
-            "CRITICAL"
-          ],
-          "default": "MEDIUM",
-          "description": "Minimum risk level to highlight in financial analysis mode."
-        },
-        "codescribe.complianceFramework": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "SOX",
-              "Basel III",
-              "MiFID II",
-              "CFTC",
-              "SEC",
-              "General"
-            ]
-          },
-          "default": [
-            "General"
-          ],
-          "description": "Regulatory frameworks to consider during financial compliance analysis."
+          "default": "gemini-2.0-flash-exp",
+          "description": "Gemini model to use for generating summaries. Choose from the latest Gemini 2.0 and 2.5 models for optimal performance and capabilities."
         }
+
       }
     }
   },
