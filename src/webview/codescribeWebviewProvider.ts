@@ -608,6 +608,71 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
                     background: transparent;
                     padding: 0;
                 }
+                
+                /* Historical Analysis Collapsible Section */
+                .historical-analysis {
+                    border: 1px solid var(--vscode-input-border);
+                    border-radius: 6px;
+                    margin: 16px 0;
+                    overflow: hidden;
+                }
+                
+                .historical-analysis summary {
+                    cursor: pointer;
+                    padding: 12px 16px;
+                    background: var(--vscode-list-hoverBackground);
+                    border: none;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    user-select: none;
+                }
+                
+                .historical-analysis summary:hover {
+                    background: var(--vscode-button-hoverBackground);
+                }
+                
+                .historical-analysis summary h4 {
+                    margin: 0;
+                    font-size: 1em;
+                    font-weight: 600;
+                    color: var(--vscode-foreground);
+                }
+                
+                .expand-hint {
+                    font-size: 0.8em;
+                    color: var(--vscode-descriptionForeground);
+                    font-weight: normal;
+                    margin-left: 8px;
+                }
+                
+                .historical-content {
+                    padding: 16px;
+                    background: var(--vscode-editor-background);
+                    border-top: 1px solid var(--vscode-input-border);
+                }
+                
+                /* Hide the default disclosure triangle */
+                .historical-analysis summary::-webkit-details-marker {
+                    display: none;
+                }
+                
+                .historical-analysis summary::marker {
+                    content: none;
+                }
+                
+                /* Add custom arrow */
+                .historical-analysis summary::before {
+                    content: '▶';
+                    font-size: 0.8em;
+                    color: var(--vscode-descriptionForeground);
+                    margin-right: 8px;
+                    transition: transform 0.2s ease;
+                }
+                
+                .historical-analysis[open] summary::before {
+                    transform: rotate(90deg);
+                }
             </style>
         </head>
         <body>
@@ -626,7 +691,7 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
                 <div class="summary">
                     <h3>Code Analysis</h3>
                     <div class="summary-content">
-                        ${this._formatSummary(results.summary)}
+                        ${results.summary}
                     </div>
                 </div>
                 
@@ -738,9 +803,18 @@ export class CodeScribeWebviewProvider implements vscode.WebviewViewProvider {
         formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
         
         // Handle the structured sections
-        // Convert markdown headers to HTML headers
+        // Handle Historical Analysis as collapsible first
+        formatted = formatted.replace(/^### Historical Analysis$/gm, 
+            '<details class="historical-analysis"><summary><h4>Historical Analysis <span class="expand-hint">(click to expand)</span></h4></summary><div class="historical-content">');
+        
+        // Convert other markdown headers to HTML headers
         formatted = formatted.replace(/^### (.*$)/gm, '<h4>$1</h4>');
         formatted = formatted.replace(/^## (.*$)/gm, '<h4>$1</h4>');
+        
+        // Close the historical analysis section if it was opened
+        if (formatted.includes('<details class="historical-analysis">')) {
+            formatted = formatted.replace(/(<details class="historical-analysis">.*?)(?=<h4>(?!.*Historical Analysis)|$)/s, '$1</div></details>');
+        }
         
         // Handle bullet points
         formatted = formatted.replace(/^- (.*$)/gm, '<li>$1</li>');

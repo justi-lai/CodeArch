@@ -31,6 +31,16 @@ node_modules/**/README*
 node_modules/**/HISTORY*
 node_modules/**/*.map
 node_modules/**/*.d.ts
+node_modules/**/test/**
+node_modules/**/tests/**
+node_modules/**/docs/**
+node_modules/**/doc/**
+node_modules/**/examples/**
+node_modules/**/example/**
+node_modules/**/.github/**
+node_modules/**/src/**
+node_modules/**/.nyc_output/**
+node_modules/**/coverage/**
 
 # Test files
 test/**
@@ -47,3 +57,7 @@ webpack.config.js
 *.log
 .DS_Store
 coverage/
+
+# Additional files to exclude
+test_json_response.html
+Project_Info.md

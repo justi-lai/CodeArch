@@ -156,8 +156,8 @@ export function activate(context: vscode.ExtensionContext) {
 
                         progress.report({ increment: 40, message: 'Generating AI summary...' });
 
-                        // Generate AI summary
-                        const summary = await aiSummaryService.generateSummary(
+                        // Generate enhanced AI summary with AST and LSP analysis
+                        const summary = await aiSummaryService.generateEnhancedSummary(
                             analysisResult,
                             selectedText,
                             await apiKeyManager.getApiKey(),
@@ -222,14 +222,16 @@ export function activate(context: vscode.ExtensionContext) {
                 // Get API key
                 const apiKey = await apiKeyManager.getApiKey();
                 
-                // Generate new summary using standard analysis
-                const summary = await aiSummaryService.generateSummary(
+                // Generate enhanced summary using AST and LSP analysis
+                const startLine = parseInt(results.lineRange.split('-')[0]);
+                const endLine = parseInt(results.lineRange.split('-')[1]);
+                const summary = await aiSummaryService.generateEnhancedSummary(
                     results.analysisResult,
                     results.selectedText,
                     apiKey,
                     results.filePath,
-                    parseInt(results.lineRange.split('-')[0]),
-                    parseInt(results.lineRange.split('-')[1])
+                    startLine,
+                    endLine
                 );
 
                 // Update webview with new summary
