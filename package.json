@@ -38,7 +38,8 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "fetch-parsers": "./download-parsers.sh"
   },
   "devDependencies": {
     "@types/emscripten": "^1.41.5",

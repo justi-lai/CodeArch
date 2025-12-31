@@ -154,7 +154,12 @@ export class TreeSitterAnalysis {
             'cpp': 'tree-sitter-cpp.wasm',
             'c': 'tree-sitter-c.wasm',
             'rust': 'tree-sitter-rust.wasm',
-            'ruby': 'tree-sitter-ruby.wasm'
+            'ruby': 'tree-sitter-ruby.wasm',
+            'php': 'tree-sitter-php.wasm',
+            'csharp': 'tree-sitter-c_sharp.wasm',
+            'shellscript': 'tree-sitter-bash.wasm',
+            'swift': 'tree-sitter-swift.wasm',
+            'kotlin': 'tree-sitter-kotlin.wasm'
         };
         return map[languageId];
     }
