@@ -1,5 +1,23 @@
-out
-dist
-node_modules
+# Build outputs
+out/
+dist/
+node_modules/
+
+# VS Code Test artifacts
 .vscode-test/
+.vscode-test.*
+
+# extension package
 *.vsix
+
+# Tooling/System
+.DS_Store
+.env
+npm-debug.log*
+
+# Workspace
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
+!.vscode/extensions.json

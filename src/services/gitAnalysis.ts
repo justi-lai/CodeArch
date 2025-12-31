@@ -11,13 +11,14 @@ export interface CommitRecord {
     date: string;
     message: string;
     lineRangeDiff: string;
+    language: string;
     startLine: number;
     endLine: number;
 }
 
 export class GitAnalysis {
 
-    public async performAnalysis(document: vscode.TextDocument, range: vscode.Range) {
+    public async performAnalysis(document: vscode.TextDocument, range: vscode.Range): Promise<CommitRecord[]> {
 
         if (!await this.isInsideGitRepository(document)) {
             throw new Error("File is not inside a Git repository.");
@@ -28,85 +29,57 @@ export class GitAnalysis {
             throw new Error("Could not determine the Git repository root.");
         }
 
-        console.log("Analyzing repository:", repository);
+        const start = range.start.line + 1;
+        const end = range.end.line + 1;
+        const filePath = document.uri.fsPath;
+        const relativePath = path.relative(repository, filePath);
 
-        const blameData = await this.runGitBlame(document, range, repository);
+        console.log(`Analyzing range ${start}-${end} in ${relativePath}`);
 
-        const commitHashes = new Set<string>();
-        const lines = blameData.split('\n');
-        for (const line of lines) {
-            const parts = line.split(' ');
-            if (parts.length >= 4) {
-                const hash = parts[0];
-                if (/^[0-9a-f]{40}$/i.test(hash) && !/^[0]+$/.test(hash)) {
-                    commitHashes.add(hash);
-                }
-            }
+        try {
+            const separator = "===COMMIT_RECORD_START===";
+            const command = `git log -L ${start},${end}:"${relativePath}" --format="${separator}%H|%an|%ad|%s"`;
+
+            const { stdout } = await execPromise(command, { cwd: repository, maxBuffer: 10 * 1024 * 1024 });
+
+            return this.parseGitLogLOutput(stdout, separator, start, end, document.languageId);
+        } catch (error: any) {
+            console.error("Git log -L failed:", error);
+            throw new Error(`Failed to analyze line history: ${error.message}`);
         }
+    }
 
-        const analysisResults: CommitRecord[] = [];
-        for (const commit of commitHashes) {
-            try {
-                // 1. Get structured metadata (Hash|Author|Date|Subject)
-                const { stdout: metadata } = await execPromise(
-                    `git log -1 --format="%H|%an|%ad|%s" ${commit}`,
-                    { cwd: repository }
-                );
+    private parseGitLogLOutput(output: string, separator: string, startLine: number, endLine: number, languageId: string): CommitRecord[] {
+        const records: CommitRecord[] = [];
+        const sections = output.split(separator);
 
-                const [hash, author, date, message] = metadata.trim().split('|');
+        for (const section of sections) {
+            if (!section.trim()) {
+                continue;
+            }
 
-                // 2. Get the specific line-range diff
-                const diff = await this.runGitShow(document, range, repository, commit);
+            const lines = section.split('\n');
+            const metadataLine = lines[0];
+            const [hash, author, date, message] = metadataLine.split('|');
 
-                analysisResults.push({
+            const diffLines = lines.slice(1);
+            const diff = diffLines.join('\n').trim();
+
+            if (hash) {
+                records.push({
                     hash,
                     author,
                     date,
                     message,
                     lineRangeDiff: diff,
-                    startLine: range.start.line + 1,
-                    endLine: range.end.line + 1
+                    language: languageId,
+                    startLine,
+                    endLine
                 });
-            } catch (error) {
-                console.error(`Failed to analyze commit ${commit}:`, error);
             }
         }
 
-        return JSON.stringify(analysisResults, null, 2);
-    }
-
-    private async runGitShow(document: vscode.TextDocument, range: vscode.Range, repository: string, commit: string): Promise<string> {
-        const start = range.start.line + 1;
-        const end = range.end.line + 1;
-        const filePath = document.uri.fsPath;
-        const repoRoot = repository;
-
-        const relativePath = path.relative(repoRoot, filePath);
-
-        try {
-            // Using --pretty=format:"" hides the commit, author, and date headers
-            const command = `git show ${commit} --pretty=format:"" -L ${start},${end}:"${relativePath}"`;
-            const { stdout } = await execPromise(command, { cwd: repoRoot });
-            return stdout.trim();
-        } catch (error) {
-            console.error("Git show failed:", error);
-            throw new Error("Failed to run git show.");
-        }
-    }
-
-    private async runGitBlame(document: vscode.TextDocument, range: vscode.Range, repository: string): Promise<string> {
-        const start = range.start.line + 1;
-        const end = range.end.line + 1;
-        const filePath = document.uri.fsPath;
-        const cwd = repository;
-
-        try {
-            const { stdout } = await execPromise(`git blame -L ${start},${end} --porcelain "${filePath}"`, { cwd });
-            return stdout;
-        } catch (error) {
-            console.error("Git blame failed:", error);
-            throw new Error("Failed to run git blame.");
-        }
+        return records;
     }
 
     private async isInsideGitRepository(document: vscode.TextDocument): Promise<boolean> {

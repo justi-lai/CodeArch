@@ -1,8 +1,76 @@
 import * as vscode from 'vscode';
-import { GitAnalysis } from './services/gitAnalysis';
+import { GitAnalysis, CommitRecord } from './services/gitAnalysis';
+import { getWebviewContent } from './webpages/inlineWebview';
+import { TreeSitterAnalysis } from './services/treesitterAnalysis';
+import { SecretsManager, AIProvider } from './services/secretsManager';
+import { AIAnalysis, AIAnalysisResult } from './services/aiAnalysis';
 
 export function activate(context: vscode.ExtensionContext) {
 	const gitService = new GitAnalysis();
+	const treeSitterService = new TreeSitterAnalysis(context);
+	const secretsManager = new SecretsManager(context);
+	const aiService = new AIAnalysis();
+
+	treeSitterService.initialize().catch(err => {
+		console.error('Failed to initialize Tree-sitter:', err);
+	});
+
+	const configureAICommand = vscode.commands.registerCommand('codearch.configureAI', async () => {
+		const providers: { label: string, id: AIProvider }[] = [
+			{ label: 'Google Gemini', id: 'gemini' },
+			{ label: 'OpenAI', id: 'openai' },
+			{ label: 'Anthropic Claude', id: 'claude' }
+		];
+
+		const selected = await vscode.window.showQuickPick(providers, {
+			placeHolder: 'Select AI Provider'
+		});
+
+		if (selected) {
+			await secretsManager.setSelectedProvider(selected.id);
+
+			const models: Record<AIProvider, string[]> = {
+				'gemini': [
+					'gemini-2.0-flash',
+					'gemini-2.5-flash',
+					'gemini-2.5-pro',
+					'gemini-3-flash-preview',
+					'gemini-3-pro-preview'
+				],
+				'openai': [
+					'gpt-5',
+					'gpt-5-mini',
+					'gpt-5.1',
+					'gpt-5.2',
+					'gpt-4o'
+				],
+				'claude': [
+					'claude-sonnet-4-5',
+					'claude-haiku-4-5',
+					'claude-opus-4-5'
+				]
+			};
+
+			const model = await vscode.window.showQuickPick(models[selected.id], {
+				placeHolder: `Select model for ${selected.label}`
+			});
+
+			if (model) {
+				await secretsManager.setSelectedModel(model);
+				vscode.window.showInformationMessage(`CodeArch: Switched to ${selected.label} (${model})`);
+
+				const key = await secretsManager.getApiKey(selected.id);
+				if (!key) {
+					await secretsManager.promptForApiKey(selected.id);
+				}
+			}
+		}
+	});
+
+	const setApiKeyCommand = vscode.commands.registerCommand('codearch.setApiKey', async () => {
+		const provider = secretsManager.getSelectedProvider();
+		await secretsManager.promptForApiKey(provider);
+	});
 
 	const analyzeCommand = vscode.commands.registerCommand('codearch.codearchAnalyze', async (document: vscode.TextDocument, range: vscode.Range) => {
 
@@ -15,14 +83,85 @@ export function activate(context: vscode.ExtensionContext) {
 			progress.report({ message: "Connecting to Git API..." });
 
 			try {
-				// Call your new service!
-				const result = await gitService.performAnalysis(document, range);
+				const result: CommitRecord[] = await gitService.performAnalysis(document, range);
+				const scopeInfo = await treeSitterService.getScopeInfo(document, range);
 
 				progress.report({ message: "Processing history..." });
-				await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate work
 
-				console.log(result);
-				vscode.window.showInformationMessage(`Result: ${result}`);
+				console.log(`Found ${result.length} commits impacting this range.`);
+				console.log("Enclosing Scopes (Tree-sitter):", scopeInfo.enclosingScopes);
+
+				let refCount = 0;
+				let referenceLocations: string[] = [];
+				const targetScope = scopeInfo.enclosingScopes.find(s => s.nameRange);
+				if (targetScope && targetScope.nameRange) {
+					progress.report({ message: `Finding references for ${targetScope.name}...` });
+
+					const pos = new vscode.Position(
+						targetScope.nameRange.startLine - 1,
+						targetScope.nameRange.startColumn
+					);
+
+					const references = await vscode.commands.executeCommand<vscode.Location[]>(
+						'vscode.executeReferenceProvider',
+						document.uri,
+						pos
+					);
+
+					if (references) {
+						const filteredReferences = references.filter(ref => {
+							const isSameFile = ref.uri.toString() === document.uri.toString();
+							const isSameStart = ref.range.start.line === (targetScope!.nameRange!.startLine - 1) &&
+								ref.range.start.character === targetScope!.nameRange!.startColumn;
+							return !(isSameFile && isSameStart);
+						});
+
+						refCount = filteredReferences.length;
+						referenceLocations = filteredReferences.map(ref => {
+							const relPath = vscode.workspace.asRelativePath(ref.uri);
+							return `${relPath}:${ref.range.start.line + 1}`;
+						});
+					}
+				}
+
+				let aiInsight: AIAnalysisResult | string = "";
+				const aiConfig = await secretsManager.getConfig();
+				if (aiConfig.apiKey) {
+					progress.report({ message: `Generating AI Insight with ${aiConfig.provider}...` });
+					try {
+						aiInsight = await aiService.analyze(
+							aiConfig,
+							document.getText(),
+							vscode.workspace.asRelativePath(document.uri),
+							{ start: range.start.line + 1, end: range.end.line + 1 },
+							result,
+							scopeInfo.enclosingScopes,
+							referenceLocations
+						);
+					} catch (aiError: any) {
+						console.error("AI Analysis failed:", aiError);
+						aiInsight = `AI analysis failed: ${aiError.message}`;
+					}
+				} else {
+					aiInsight = `<div class="ai-setup-nudge">AI analysis is available! <a href="command:codearch.configureAI">Configure your API Key</a> to get deep insights into the intent and risk of this code.</div>`;
+				}
+
+				if (result.length > 0) {
+					const panel = vscode.window.createWebviewPanel(
+						'codearchResult',
+						'CodeArch Analysis',
+						vscode.ViewColumn.Beside,
+						{
+							enableScripts: true,
+							enableCommandUris: true
+						}
+					);
+
+					panel.webview.html = getWebviewContent(result, scopeInfo.enclosingScopes, refCount, aiInsight);
+
+				} else {
+					vscode.window.showInformationMessage(`Analysis complete. No commits found for this range.`);
+				}
 			} catch (error: any) {
 				vscode.window.showErrorMessage(`Analysis failed: ${error.message}`);
 			}
@@ -39,7 +178,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	);
 
-	context.subscriptions.push(analyzeCommand, provider);
+	context.subscriptions.push(analyzeCommand, provider, configureAICommand, setApiKeyCommand);
 }
 
 export class MyCodeActionProvider implements vscode.CodeActionProvider {
@@ -57,7 +196,6 @@ export class MyCodeActionProvider implements vscode.CodeActionProvider {
 		action.command = {
 			command: 'codearch.codearchAnalyze',
 			title: 'CodeArch: Analyze Selected Code',
-			// Pass the document and range so the service can use them for Git
 			arguments: [document, range]
 		};
 

@@ -1,11 +1,22 @@
+# Exclude build metadata and configuration
 .vscode/**
 .vscode-test/**
-src/**
 .gitignore
-.yarnrc
 vsc-extension-quickstart.md
-**/tsconfig.json
-**/eslint.config.mjs
+tsconfig.json
+eslint.config.mjs
+package-lock.json
+
+# Exclude source code
+src/**
+
+# Exclude development-only binaries/logs
 **/*.map
 **/*.ts
-**/.vscode-test.*
+**/.DS_Store
+**/*.vsix
+
+# IMPORTANT: Ensure out/ and parsers/ are INCLUDED. 
+# They contain the JS logic and WASM grammars required at runtime.
+!out/**
+!parsers/**
