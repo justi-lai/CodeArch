@@ -15,72 +15,14 @@ export function activate(context: vscode.ExtensionContext) {
 		console.error('Failed to initialize Tree-sitter:', err);
 	});
 
-	const configureAICommand = vscode.commands.registerCommand('codearch.configureAI', async () => {
-		const providers: { label: string, id: AIProvider }[] = [
-			{ label: 'Google Gemini', id: 'gemini' },
-			{ label: 'OpenAI', id: 'openai' },
-			{ label: 'Anthropic Claude', id: 'claude' }
-		];
-
-		const selected = await vscode.window.showQuickPick(providers, {
-			placeHolder: 'Select AI Provider'
-		});
-
-		if (selected) {
-			await secretsManager.setSelectedProvider(selected.id);
-
-			const models: Record<AIProvider, string[]> = {
-				'gemini': [
-					'gemini-2.0-flash',
-					'gemini-2.5-flash',
-					'gemini-2.5-pro',
-					'gemini-3-flash-preview',
-					'gemini-3-pro-preview'
-				],
-				'openai': [
-					'gpt-5',
-					'gpt-5-mini',
-					'gpt-5.1',
-					'gpt-5.2',
-					'gpt-4o'
-				],
-				'claude': [
-					'claude-sonnet-4-5',
-					'claude-haiku-4-5',
-					'claude-opus-4-5'
-				]
-			};
-
-			const model = await vscode.window.showQuickPick(models[selected.id], {
-				placeHolder: `Select model for ${selected.label}`
-			});
-
-			if (model) {
-				await secretsManager.setSelectedModel(model);
-				vscode.window.showInformationMessage(`CodeArch: Switched to ${selected.label} (${model})`);
-
-				const key = await secretsManager.getApiKey(selected.id);
-				if (!key) {
-					await secretsManager.promptForApiKey(selected.id);
-				}
-			}
-		}
-	});
-
-	const setApiKeyCommand = vscode.commands.registerCommand('codearch.setApiKey', async () => {
-		const provider = secretsManager.getSelectedProvider();
-		await secretsManager.promptForApiKey(provider);
-	});
-
-	const analyzeCommand = vscode.commands.registerCommand('codearch.codearchAnalyze', async (document: vscode.TextDocument, range: vscode.Range) => {
-
+	async function runCodeArchAudit(document: vscode.TextDocument, range: vscode.Range) {
 		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
 			title: "CodeArch: Analyzing Selected Code",
 			cancellable: false
 		}, async (progress, token) => {
 
-			progress.report({ message: "Connecting to Git API..." });
+			progress.report({ message: "Searching for relevant history..." });
 
 			try {
 				const result: CommitRecord[] = await gitService.performAnalysis(document, range);
@@ -102,14 +44,14 @@ export function activate(context: vscode.ExtensionContext) {
 						targetScope.nameRange.startColumn
 					);
 
-					const references = await vscode.commands.executeCommand<vscode.Location[]>(
+					const lsReferences = await vscode.commands.executeCommand<vscode.Location[]>(
 						'vscode.executeReferenceProvider',
 						document.uri,
 						pos
 					);
 
-					if (references) {
-						const filteredReferences = references.filter(ref => {
+					if (lsReferences && lsReferences.length > 0) {
+						const filteredReferences = lsReferences.filter(ref => {
 							const isSameFile = ref.uri.toString() === document.uri.toString();
 							const isSameStart = ref.range.start.line === (targetScope!.nameRange!.startLine - 1) &&
 								ref.range.start.character === targetScope!.nameRange!.startColumn;
@@ -121,6 +63,37 @@ export function activate(context: vscode.ExtensionContext) {
 							const relPath = vscode.workspace.asRelativePath(ref.uri);
 							return `${relPath}:${ref.range.start.line + 1}`;
 						});
+					} else {
+						const recommendations: Record<string, { id: string, name: string }> = {
+							'c': { id: 'ms-vscode.cpptools', name: 'C/C++' },
+							'cpp': { id: 'ms-vscode.cpptools', name: 'C/C++' },
+							'csharp': { id: 'ms-dotnettools.csharp', name: 'C#' },
+							'go': { id: 'golang.go', name: 'Go' },
+							'java': { id: 'redhat.java', name: 'Java' },
+							'javascript': { id: 'vscode.typescript-language-features', name: 'JavaScript' },
+							'javascriptreact': { id: 'vscode.typescript-language-features', name: 'JavaScript' },
+							'kotlin': { id: 'fwcd.kotlin', name: 'Kotlin' },
+							'php': { id: 'devsense.phptools-vscode', name: 'PHP' },
+							'python': { id: 'ms-python.python', name: 'Python' },
+							'ruby': { id: 'shopify.ruby-lsp', name: 'Ruby' },
+							'rust': { id: 'rust-lang.rust-analyzer', name: 'rust-analyzer' },
+							'shellscript': { id: 'mads-hartmann.bash-ide-vscode', name: 'Bash' },
+							'swift': { id: 'sswp.swift-lang', name: 'Swift' },
+							'typescript': { id: 'vscode.typescript-language-features', name: 'TypeScript' },
+							'typescriptreact': { id: 'vscode.typescript-language-features', name: 'TypeScript' }
+						};
+
+						const rec = recommendations[document.languageId];
+						if (rec && !vscode.extensions.getExtension(rec.id)) {
+							vscode.window.showInformationMessage(
+								`CodeArch: Projects in ${rec.name} require the official ${rec.name} extension for full analysis.`,
+								'View Extension'
+							).then(selection => {
+								if (selection === 'View Extension') {
+									vscode.commands.executeCommand('extension.open', rec.id);
+								}
+							});
+						}
 					}
 				}
 
@@ -147,9 +120,12 @@ export function activate(context: vscode.ExtensionContext) {
 				}
 
 				if (result.length > 0) {
+					const fileName = document.fileName.split(/[\\/]/).pop() || 'File';
+					const lineRange = `${range.start.line + 1}-${range.end.line + 1}`;
+
 					const panel = vscode.window.createWebviewPanel(
 						'codearchResult',
-						'CodeArch Analysis',
+						`Audit: ${fileName} [L${lineRange}]`,
 						vscode.ViewColumn.Beside,
 						{
 							enableScripts: true,
@@ -168,6 +144,58 @@ export function activate(context: vscode.ExtensionContext) {
 
 			return;
 		});
+	}
+
+	const configureAICommand = vscode.commands.registerCommand('codearch.configureAI', async () => {
+		const providers: { label: string, id: AIProvider }[] = [
+			{ label: 'Google Gemini', id: 'gemini' },
+			{ label: 'OpenAI', id: 'openai' },
+			{ label: 'Anthropic Claude', id: 'claude' }
+		];
+
+		const selected = await vscode.window.showQuickPick(providers, {
+			placeHolder: 'Select AI Provider'
+		});
+
+		if (selected) {
+			await secretsManager.setSelectedProvider(selected.id);
+
+			const models: Record<AIProvider, string[]> = {
+				'gemini': ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3-pro-preview'],
+				'openai': ['gpt-5', 'gpt-5-mini', 'gpt-5.1', 'gpt-5.2', 'gpt-4o'],
+				'claude': ['claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-opus-4-5']
+			};
+
+			const model = await vscode.window.showQuickPick(models[selected.id], {
+				placeHolder: `Select model for ${selected.label}`
+			});
+
+			if (model) {
+				await secretsManager.setSelectedModel(model);
+				vscode.window.showInformationMessage(`CodeArch: Switched to ${selected.label} (${model})`);
+
+				const key = await secretsManager.getApiKey(selected.id);
+				if (!key) {
+					await secretsManager.promptForApiKey(selected.id);
+				}
+			}
+		}
+	});
+
+	const setApiKeyCommand = vscode.commands.registerCommand('codearch.setApiKey', async () => {
+		const provider = secretsManager.getSelectedProvider();
+		await secretsManager.promptForApiKey(provider);
+	});
+
+	const analyzeCommand = vscode.commands.registerCommand('codearch.codearchAnalyze', async (document: vscode.TextDocument, range: vscode.Range) => {
+		if (!document || !range) {
+			const activeEditor = vscode.window.activeTextEditor;
+			if (activeEditor) {
+				await runCodeArchAudit(activeEditor.document, activeEditor.selection);
+			}
+		} else {
+			await runCodeArchAudit(document, range);
+		}
 	});
 
 	const provider = vscode.languages.registerCodeActionsProvider(

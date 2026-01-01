@@ -98,8 +98,33 @@ export class TreeSitterAnalysis {
     }
 
     private getScopeDetails(node: Parser.SyntaxNode): { name: string, range?: EnclosingScope['range'] } {
-        const nameNode = node.childForFieldName('name') ||
-            node.children.find((c: Parser.SyntaxNode) => c.type === 'identifier' || c.type === 'property_identifier');
+        // 1. Try to find the name using the 'name' field (works for many languages)
+        let nameNode = node.childForFieldName('name');
+
+        // 2. If no 'name' field, try 'declarator' recursively (Crucial for C/C++)
+        if (!nameNode) {
+            let current = node.childForFieldName('declarator');
+            while (current) {
+                const nestedDeclarator = current.childForFieldName('declarator');
+                if (nestedDeclarator) {
+                    current = nestedDeclarator;
+                } else {
+                    // We've reached the innermost declarator, check if it's the identifier
+                    if (current.type === 'identifier' || current.type === 'field_identifier') {
+                        nameNode = current;
+                    } else {
+                        // Sometimes the identifier is a child of the final declarator
+                        nameNode = current.children.find(c => c.type === 'identifier' || c.type === 'field_identifier') || null;
+                    }
+                    break;
+                }
+            }
+        }
+
+        // 3. Fallback to searching children for identifiers
+        if (!nameNode) {
+            nameNode = node.children.find((c: Parser.SyntaxNode) => c.type === 'identifier' || c.type === 'property_identifier') || null;
+        }
 
         if (nameNode) {
             return {

@@ -20,7 +20,7 @@
     "commands": [
       {
         "command": "codearch.codearchAnalyze",
-        "title": "CodeArch: Analyze Selected Code"
+        "title": "CodeArch: Analyze"
       },
       {
         "command": "codearch.configureAI",
@@ -30,7 +30,16 @@
         "command": "codearch.setApiKey",
         "title": "CodeArch: Set AI API Key"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "codearch.codearchAnalyze",
+          "group": "modification",
+          "when": "editorHasSelection"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
