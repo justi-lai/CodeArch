@@ -2,7 +2,7 @@
 
 All notable changes to the "codearch" extension will be documented in this file.
 
-## [1.1.1] - 2026-01-02
+## [1.1.2] - 2026-01-02
 
 ### Added
 - **Custom LLM Provider**: Support for local/on-premise engines (Ollama, vLLM) and aggregators (OpenRouter) via OpenAI-compatible endpoints.
