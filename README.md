@@ -1,7 +1,7 @@
 # CodeArch
 **AI-Powered Code History & Intent Synthesis for VS Code**
 
-CodeArch is a sophisticated code auditing extension that bridges the gap between the current state of your code, its historical intent, and its project-wide impact. It uses a combination of **Tree-sitter**, **Git**, and **LLMs** (Gemini, OpenAI, Claude) to provide deep insights into *why* a piece of code exists and how risky it is to change.
+CodeArch is a sophisticated code auditing extension that bridges the gap between the current state of your code, its historical intent, and its project-wide impact. It uses a combination of **Tree-sitter**, **Git**, and **LLMs** (Gemini, OpenAI, Claude, OpenRouter, or Local models) to provide deep insights into *why* a piece of code exists and how risky it is to change.
 
 ## Key Features
 
@@ -19,7 +19,9 @@ CodeArch is a sophisticated code auditing extension that bridges the gap between
 2. **Configure AI**:
    - Open the Command Palette (`Cmd/Ctrl+Shift+P`).
    - Run **CodeArch: Configure AI Provider**.
-   - Select your preferred model (Gemini, OpenAI, or Claude) and enter your API key when prompted.
+   - Select your preferred provider (**Gemini**, **OpenAI**, **Claude**, or **Custom**).
+   - If using **Custom**, provide your API Base URL (e.g., for Ollama or OpenRouter) and your specific Model ID.
+   - Enter your API key when prompted (if required by your provider).
 
 > **Note**: Tier 1 language parsers (JS, TS, Python, Go, etc.) are pre-bundled. If you are building from source, run `npm run fetch-parsers` to initialize the grammar binaries.
 
