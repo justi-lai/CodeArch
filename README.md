@@ -10,6 +10,7 @@ CodeArch is a sophisticated code auditing extension that bridges the gap between
 - **Structural Awareness**: Uses WASM-powered Tree-sitter grammars to identify the exact logical container (Function, Class, Method) of your selection.
 - **Blast Radius Analysis**: Automatically calculates how many other places in your workspace reference the code you're auditing.
 - **Multi-Provider AI**: Supports the latest 2025/2026 models from **Google Gemini**, **OpenAI**, and **Anthropic Claude**.
+- **Privacy-First (Air-Gapped)**: Support for local LLM engines (Ollama, vLLM, LM Studio) via custom OpenAI-compatible endpoints.
 - **Secure by Design**: API keys are stored safely in your OS keychain using VS Code's native Secrets Storage.
 
 ## Installation & Setup

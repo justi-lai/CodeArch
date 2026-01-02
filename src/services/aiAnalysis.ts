@@ -26,7 +26,7 @@ export class AIAnalysis {
         scopes: EnclosingScope[],
         references: string[]
     ): Promise<AIAnalysisResult> {
-        if (!config.apiKey) {
+        if (config.provider !== 'custom' && !config.apiKey) {
             throw new Error(`API Key for ${config.provider} is not configured.`);
         }
 
@@ -42,13 +42,16 @@ export class AIAnalysis {
         let rawResponse = "";
         switch (config.provider) {
             case 'gemini':
-                rawResponse = await this.callGemini(config.apiKey, config.model, prompt);
+                rawResponse = await this.callGemini(config.apiKey!, config.model, prompt);
                 break;
             case 'openai':
-                rawResponse = await this.callOpenAI(config.apiKey, config.model, prompt);
+                rawResponse = await this.callOpenAI(config.apiKey!, config.model, prompt);
                 break;
             case 'claude':
-                rawResponse = await this.callClaude(config.apiKey, config.model, prompt);
+                rawResponse = await this.callClaude(config.apiKey!, config.model, prompt);
+                break;
+            case 'custom':
+                rawResponse = await this.callCustom(config.apiKey, config.customUrl, config.model, prompt);
                 break;
             default:
                 throw new Error(`Unsupported provider: ${config.provider}`);
@@ -214,5 +217,42 @@ Respond ONLY with a JSON object containing the following keys (values should be 
 
         const data: any = await response.json();
         return data.content[0].text;
+    }
+
+    private async callCustom(apiKey: string | undefined, baseUrl: string | undefined, model: string, prompt: string): Promise<string> {
+        let cleanBaseUrl = (baseUrl || 'http://localhost:11434/v1').trim();
+        if (cleanBaseUrl.endsWith('/')) {
+            cleanBaseUrl = cleanBaseUrl.slice(0, -1);
+        }
+
+        const url = cleanBaseUrl.endsWith('/chat/completions')
+            ? cleanBaseUrl
+            : `${cleanBaseUrl}/chat/completions`;
+
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+        };
+
+        if (apiKey) {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+        }
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+                model: model,
+                messages: [{ role: 'user', content: prompt }],
+                response_format: { type: "json_object" }
+            })
+        });
+
+        if (!response.ok) {
+            const err: any = await response.json().catch(() => ({ error: { message: response.statusText } }));
+            throw new Error(`Custom LLM API error: ${err.error?.message || response.statusText}`);
+        }
+
+        const data: any = await response.json();
+        return data.choices[0].message.content;
     }
 }

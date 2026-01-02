@@ -155,7 +155,8 @@ export function activate(context: vscode.ExtensionContext) {
 		const providers: { label: string, id: AIProvider }[] = [
 			{ label: 'Google Gemini', id: 'gemini' },
 			{ label: 'OpenAI', id: 'openai' },
-			{ label: 'Anthropic Claude', id: 'claude' }
+			{ label: 'Anthropic Claude', id: 'claude' },
+			{ label: 'Custom (Local/On-Prem)', id: 'custom' }
 		];
 
 		const selected = await vscode.window.showQuickPick(providers, {
@@ -168,20 +169,52 @@ export function activate(context: vscode.ExtensionContext) {
 			const models: Record<AIProvider, string[]> = {
 				'gemini': ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3-pro-preview'],
 				'openai': ['gpt-5', 'gpt-5-mini', 'gpt-5.1', 'gpt-5.2', 'gpt-4o'],
-				'claude': ['claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-opus-4-5']
+				'claude': ['claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-opus-4-5'],
+				'custom': []
 			};
 
-			const model = await vscode.window.showQuickPick(models[selected.id], {
-				placeHolder: `Select model for ${selected.label}`
-			});
+			if (selected.id === 'custom') {
+				const baseUrl = await vscode.window.showInputBox({
+					prompt: 'Enter API Base URL (e.g., http://localhost:11434/v1)',
+					value: secretsManager.getCustomUrl(),
+					placeHolder: 'http://localhost:11434/v1'
+				});
 
-			if (model) {
-				await secretsManager.setSelectedModel(model);
-				vscode.window.showInformationMessage(`CodeArch: Switched to ${selected.label} (${model})`);
+				if (baseUrl) {
+					await secretsManager.setCustomUrl(baseUrl);
 
-				const key = await secretsManager.getApiKey(selected.id);
-				if (!key) {
-					await secretsManager.promptForApiKey(selected.id);
+					const modelName = await vscode.window.showInputBox({
+						prompt: 'Enter Model ID (e.g., llama3, mistral)',
+						value: secretsManager.getSelectedModel(),
+						placeHolder: 'llama3'
+					});
+
+					if (modelName) {
+						await secretsManager.setSelectedModel(modelName);
+						vscode.window.showInformationMessage(`CodeArch: Switched to Custom LLM (${modelName})`);
+
+						// Optional: Prompt for API key if the local provider uses one
+						const wantsKey = await vscode.window.showQuickPick(['No', 'Yes'], {
+							placeHolder: 'Does your custom provider require an API Key / Bearer Token?'
+						});
+						if (wantsKey === 'Yes') {
+							await secretsManager.promptForApiKey('custom');
+						}
+					}
+				}
+			} else {
+				const model = await vscode.window.showQuickPick(models[selected.id], {
+					placeHolder: `Select model for ${selected.label}`
+				});
+
+				if (model) {
+					await secretsManager.setSelectedModel(model);
+					vscode.window.showInformationMessage(`CodeArch: Switched to ${selected.label} (${model})`);
+
+					const key = await secretsManager.getApiKey(selected.id);
+					if (!key) {
+						await secretsManager.promptForApiKey(selected.id);
+					}
 				}
 			}
 		}
