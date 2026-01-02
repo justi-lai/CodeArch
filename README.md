@@ -14,15 +14,13 @@ CodeArch is a sophisticated code auditing extension that bridges the gap between
 
 ## Installation & Setup
 
-1. **Install the Extension**: Open the project in VS Code and press `F5` to run, or package as a `.vsix`.
-2. **Download Parsers**: CodeArch supports many languages out of the box. Run the following command in your terminal to fetch the latest language grammars:
-   ```bash
-   npm run fetch-parsers
-   ```
-3. **Configure AI**:
+1. **Install from Marketplace**: Search for **CodeArch** in the VS Code Extensions view (`Ctrl+Shift+X`) and click **Install**.
+2. **Configure AI**:
    - Open the Command Palette (`Cmd/Ctrl+Shift+P`).
    - Run **CodeArch: Configure AI Provider**.
-   - Select your preferred model and enter your API key when prompted.
+   - Select your preferred model (Gemini, OpenAI, or Claude) and enter your API key when prompted.
+
+> **Note**: Tier 1 language parsers (JS, TS, Python, Go, etc.) are pre-bundled. If you are building from source, run `npm run fetch-parsers` to initialize the grammar binaries.
 
 ## How to Use
 
