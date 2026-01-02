@@ -6,6 +6,8 @@ vsc-extension-quickstart.md
 tsconfig.json
 eslint.config.mjs
 package-lock.json
+download-parsers.sh
+.vscode-test.mjs
 
 # Exclude source code
 src/**
@@ -17,6 +19,9 @@ src/**
 **/*.vsix
 
 # IMPORTANT: Ensure out/ and parsers/ are INCLUDED. 
-# They contain the JS logic and WASM grammars required at runtime.
+# We use ! to allow them, but they must stay below the ignore list.
 !out/**
 !parsers/**
+
+# Re-ignore maps that might have been picked up by the !out/** rule
+out/**/*.map
