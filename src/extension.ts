@@ -40,6 +40,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 				let refCount = 0;
 				let referenceLocations: string[] = [];
+				let dependencyContext: string[] = [];
 				const targetScope = scopeInfo.enclosingScopes.find(s => s.nameRange);
 				if (targetScope && targetScope.nameRange) {
 					progress.report({ message: `Finding references for ${targetScope.name}...` });
@@ -64,11 +65,68 @@ export function activate(context: vscode.ExtensionContext) {
 						});
 
 						refCount = filteredReferences.length;
-						referenceLocations = filteredReferences.map(ref => {
+
+						// Fetch actual line content for the first 10 references to provide "usage examples"
+						const samples = filteredReferences.slice(0, 10);
+						referenceLocations = await Promise.all(samples.map(async ref => {
 							const relPath = vscode.workspace.asRelativePath(ref.uri);
-							return `${relPath}:${ref.range.start.line + 1}`;
-						});
-					} else {
+							try {
+								const refDoc = await vscode.workspace.openTextDocument(ref.uri);
+								const lineText = refDoc.lineAt(ref.range.start.line).text.trim();
+								return `${relPath}:${ref.range.start.line + 1}: ${lineText}`;
+							} catch {
+								return `${relPath}:${ref.range.start.line + 1}`;
+							}
+						}));
+					}
+
+					// --- CROSS-FILE DEPENDENCY CONTEXT ---
+					progress.report({ message: "Analyzing cross-file dependencies..." });
+					try {
+						const identifiers = await treeSitterService.getIdentifiersInRange(document, range);
+						const uniqueDeps = new Set<string>();
+
+						for (const id of identifiers.slice(0, 15)) { // Limit to top 15 identifiers to keep it snappy
+							const wordRange = document.getWordRangeAtPosition(document.positionAt(document.offsetAt(range.start) + document.getText(range).indexOf(id)));
+							const pos = wordRange ? wordRange.start : range.start;
+
+							const definitions = await vscode.commands.executeCommand<vscode.Location[] | vscode.LocationLink[]>(
+								'vscode.executeDefinitionProvider',
+								document.uri,
+								pos
+							);
+
+							if (definitions && definitions.length > 0) {
+								const def = definitions[0];
+								const defUri = 'uri' in def ? def.uri : def.targetUri;
+								const defRange = 'range' in def ? def.range : def.targetRange;
+
+								// Only care about external files
+								if (defUri.toString() !== document.uri.toString()) {
+									const relPath = vscode.workspace.asRelativePath(defUri);
+									if (!uniqueDeps.has(relPath + id)) {
+										uniqueDeps.add(relPath + id);
+										try {
+											const defDoc = await vscode.workspace.openTextDocument(defUri);
+											const startLine = Math.max(0, defRange.start.line);
+											const endLine = Math.min(defDoc.lineCount - 1, defRange.start.line + 4);
+											const snippet = [];
+											for (let i = startLine; i <= endLine; i++) {
+												snippet.push(defDoc.lineAt(i).text);
+											}
+											dependencyContext.push(`File: ${relPath}\nDefinition of "${id}":\n${snippet.join('\n')}`);
+										} catch (e) {
+											console.error(`Failed to read dependency ${relPath}`, e);
+										}
+									}
+								}
+							}
+						}
+					} catch (depError) {
+						console.error("Dependency analysis failed:", depError);
+					}
+
+					if (!refCount) {
 						const recommendations: Record<string, { id: string, name: string }> = {
 							'c': { id: 'ms-vscode.cpptools', name: 'C/C++' },
 							'cpp': { id: 'ms-vscode.cpptools', name: 'C/C++' },
@@ -114,7 +172,8 @@ export function activate(context: vscode.ExtensionContext) {
 							{ start: range.start.line + 1, end: range.end.line + 1 },
 							result,
 							scopeInfo.enclosingScopes,
-							referenceLocations
+							referenceLocations,
+							dependencyContext
 						);
 					} catch (aiError: any) {
 						console.error("AI Analysis failed:", aiError);

@@ -2,6 +2,11 @@
 
 All notable changes to the "codearch" extension will be documented in this file.
 
+## [1.1.3] - 2026-01-02
+
+### Added
+- **Deep Cross-File Context**: AST-powered dependency crawler that fetches external method signatures and code samples for usage locations, providing the AI with project-wide awareness.
+
 ## [1.1.2] - 2026-01-02
 
 ### Added

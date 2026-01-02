@@ -150,6 +150,47 @@ export class TreeSitterAnalysis {
         return { name: node.type };
     }
 
+    public async getIdentifiersInRange(document: vscode.TextDocument, range: vscode.Range): Promise<string[]> {
+        const lang = await this.getLanguage(document.languageId);
+        if (!lang) {
+            return [];
+        }
+
+        const parser = new Parser();
+        parser.setLanguage(lang);
+        const tree = parser.parse(document.getText());
+
+        const startByte = document.offsetAt(range.start);
+        const endByte = document.offsetAt(range.end);
+
+        const identifiers: Set<string> = new Set();
+        const cursor = tree.walk();
+
+        const visit = (node: Parser.SyntaxNode) => {
+            if (node.startIndex >= endByte || node.endIndex <= startByte) {
+                return;
+            }
+
+            // Capture generic identifiers
+            if (node.type === 'identifier' || node.type === 'variable_name' || node.type === 'type_identifier') {
+                const name = document.getText(new vscode.Range(
+                    document.positionAt(node.startIndex),
+                    document.positionAt(node.endIndex)
+                )).trim();
+                if (name.length > 2) { // Filter out short noise like 'i', 'x'
+                    identifiers.add(name);
+                }
+            }
+
+            for (const child of node.children) {
+                visit(child);
+            }
+        };
+
+        visit(tree.rootNode);
+        return Array.from(identifiers);
+    }
+
     private async getLanguage(languageId: string): Promise<Parser.Language | undefined> {
         if (this.languages.has(languageId)) {
             return this.languages.get(languageId);

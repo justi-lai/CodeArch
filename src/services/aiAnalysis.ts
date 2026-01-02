@@ -24,7 +24,8 @@ export class AIAnalysis {
         lineRange: { start: number, end: number },
         commits: CommitRecord[],
         scopes: EnclosingScope[],
-        references: string[]
+        references: string[],
+        dependencies: string[]
     ): Promise<AIAnalysisResult> {
         if (config.provider !== 'custom' && !config.apiKey) {
             throw new Error(`API Key for ${config.provider} is not configured.`);
@@ -36,7 +37,8 @@ export class AIAnalysis {
             lineRange,
             commits,
             scopes,
-            references
+            references,
+            dependencies
         );
 
         let rawResponse = "";
@@ -90,7 +92,8 @@ export class AIAnalysis {
         lineRange: { start: number, end: number },
         commits: CommitRecord[],
         scopes: EnclosingScope[],
-        references: string[]
+        references: string[],
+        dependencies: string[]
     ): string {
         const targetCode = this.extractTargetCode(documentText, lineRange);
         const scoopContext = scopes.map(s => `${s.type.replace('_', ' ')}: ${s.name}`).join(' -> ');
@@ -108,8 +111,12 @@ ${c.lineRangeDiff}`;
             ? `ACTIVE USAGE: Found ${references.length} project-wide reference(s). Some locations include:\n${references.slice(0, 10).map(r => `- ${r}`).join('\n')}${references.length > 10 ? `\n...and ${references.length - 10} more places.` : ''}`
             : "ORPHANED CODE: This code has 0 project-wide references. It is not being called anywhere else in the workspace.";
 
+        let dependencyEvidence = dependencies.length > 0
+            ? `\n### 4. DEPENDENCIES (EXTERNAL CONTEXT)\n${dependencies.join('\n\n')}\n`
+            : "";
+
         return `### SYSTEM ROLE
-You are a senior code auditor. Synthesize code, history, and usage data into a structured audit.
+You are a senior code auditor. Synthesize code, history, usage data, and external dependencies into a structured audit.
 
 ### 1. THE CODE (CURRENT STATE)
 File: ${relativePath}
@@ -124,6 +131,7 @@ ${historyEvidence}
 
 ### 3. THE USAGE (BLAST RADIUS)
 ${usageStats}
+${dependencyEvidence}
 
 ### YOUR TASK
 Respond ONLY with a JSON object containing the following keys (values should be valid Markdown strings):
