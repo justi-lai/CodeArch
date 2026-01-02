@@ -3,7 +3,7 @@
   "displayName": "CodeArch",
   "publisher": "JustinLai",
   "description": "AI-powered code history and intent synthesis. Audit your code's evolution and risk with LLM-backed insights.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "Justin Lai",
   "license": "MIT",
   "repository": {
