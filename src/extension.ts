@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Justin Lai
+ * Licensed under the MIT License.
+ */
+
 import * as vscode from 'vscode';
 import { GitAnalysis, CommitRecord } from './services/gitAnalysis';
 import { getWebviewContent } from './webpages/inlineWebview';

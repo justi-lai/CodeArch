@@ -2,8 +2,14 @@
 
 All notable changes to the "codearch" extension will be documented in this file.
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+## [1.1.0] - 2026-01-02
 
-## [Unreleased]
-
-- Initial release
+### Added
+- **AI Synthesis Engine**: Complete integration with Gemini, OpenAI, and Claude models.
+- **Deep Git Integration**: Implementation of `git log -L` to track line-level intent across history.
+- **Tree-sitter Scope Analysis**: Robust detection of logical code containers (methods, classes, functions) across 15+ languages.
+- **Audit Dashboard**: A native-styled VS Code webview providing a synthesized "Senior Auditor" report.
+- **Secure Secret Storage**: Safe management of AI API keys using VS Code's native `SecretStorage`.
+- **Project-wide Impact Stats**: Integration with VS Code reference providers to identify "Blast Radius".
+- **Language Expansion**: Support for 15 major languages via on-demand WASM parser loading.
+- **Native JSON Mode**: Guaranteed structured responses from AI models.

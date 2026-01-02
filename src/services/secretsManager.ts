@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Justin Lai
+ * Licensed under the MIT License.
+ */
+
 import * as vscode from 'vscode';
 
 export type AIProvider = 'gemini' | 'openai' | 'claude';

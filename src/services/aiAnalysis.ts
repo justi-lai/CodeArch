@@ -2,6 +2,11 @@ import { AIConfig } from "./secretsManager";
 import { CommitRecord } from "./gitAnalysis";
 import { EnclosingScope } from "./treesitterAnalysis";
 
+/*
+ * Copyright (c) 2026 Justin Lai
+ * Licensed under the MIT License.
+ */
+
 export interface AIAnalysisResult {
     intent: string;
     analysis: string;

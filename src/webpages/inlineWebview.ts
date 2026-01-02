@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2026 Justin Lai
+ * Licensed under the MIT License.
+ */
+
 import { CommitRecord } from "../services/gitAnalysis";
 import { EnclosingScope } from "../services/treesitterAnalysis";
 import { AIAnalysisResult } from "../services/aiAnalysis";

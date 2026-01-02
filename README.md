@@ -1,71 +1,62 @@
-# codearch README
+# CodeArch
+**AI-Powered Code History & Intent Synthesis for VS Code**
 
-This is the README for your extension "codearch". After writing up a brief description, we recommend including the following sections.
+CodeArch is a sophisticated code auditing extension that bridges the gap between the current state of your code, its historical intent, and its project-wide impact. It uses a combination of **Tree-sitter**, **Git**, and **LLMs** (Gemini, OpenAI, Claude) to provide deep insights into *why* a piece of code exists and how risky it is to change.
 
-## Features
+## Key Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **Audit Synthesis**: Generates a structured "Audit Report" that synthesizes Git history, logical scope (classes/methods), and project-wide usage statistics.
+- **Historical Intent Discovery**: Leverages `git log -L` mapping to trace the specific evolution of the selected lines across every commit.
+- **Structural Awareness**: Uses WASM-powered Tree-sitter grammars to identify the exact logical container (Function, Class, Method) of your selection.
+- **Blast Radius Analysis**: Automatically calculates how many other places in your workspace reference the code you're auditing.
+- **Multi-Provider AI**: Supports the latest 2025/2026 models from **Google Gemini**, **OpenAI**, and **Anthropic Claude**.
+- **Secure by Design**: API keys are stored safely in your OS keychain using VS Code's native Secrets Storage.
 
-For example if there is an image subfolder under your extension project workspace:
+## Installation & Setup
 
-\!\[feature X\]\(images/feature-x.png\)
+1. **Install the Extension**: Open the project in VS Code and press `F5` to run, or package as a `.vsix`.
+2. **Download Parsers**: CodeArch supports many languages out of the box. Run the following command in your terminal to fetch the latest language grammars:
+   ```bash
+   npm run fetch-parsers
+   ```
+3. **Configure AI**:
+   - Open the Command Palette (`Cmd/Ctrl+Shift+P`).
+   - Run **CodeArch: Configure AI Provider**.
+   - Select your preferred model and enter your API key when prompted.
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+## How to Use
 
-## Requirements
+1. **Highlight** any block of code in your editor.
+2. **Right-click** and select **CodeArch: Analyze Selected Code** (or use the Command Palette).
+3. A side-by-side **Audit Report** will open, showing:
+   - **Intent & History**: Why this code exists based on Git metadata.
+   - **Code Logic & Oversights**: Detection of hacks, dead code, or temporary fixes.
+   - **Risk Assessment**: The potential impact of modifying this logic.
+   - **Final Verdict**: A clear recommendation for the code's health.
+   - **Full History**: Interactive diffs of every relevant commit.
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+## Supported Languages
 
-## Extension Settings
+CodeArch currently provides Tier 1 support for:
+- TypeScript / TSX
+- JavaScript / JSX
+- Python
+- Go
+- Java
+- C / C++ / C#
+- Rust
+- Ruby
+- PHP
+- Swift / Kotlin
+- Shell (Bash)
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+## Origin & Recognition
 
-For example:
+CodeArch was originally conceived at **HackRice 2025**, where it was awarded **First Place** in the **Warp Dev Track** for the "Best Developer Tool." This version of CodeArch represents a complete, lightweight overhaul of that initial proof-of-concept, focused on refined performance and deep logic synthesis.
 
-This extension contributes the following settings:
+## License
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+This project is licensed under the MIT License. See the [LICENSE.txt](LICENSE.txt) file for details.
 
 ---
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+**Happy Auditing!**

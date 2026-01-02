@@ -2,7 +2,13 @@
   "name": "codearch",
   "displayName": "CodeArch",
   "description": "",
-  "version": "0.0.1",
+  "version": "1.1.0",
+  "author": "Justin Lai",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/justi-lai/CodeArch.git"
+  },
   "engines": {
     "vscode": "^1.104.0"
   },
